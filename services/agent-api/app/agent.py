@@ -37,6 +37,7 @@ class AgentState(TypedDict, total=False):
     route_path: str
     semantic_cache_hit: bool
     matched_ticket_id: str | None
+    review_reason: str | None
 
 
 class RoutingAgent:
@@ -66,6 +67,7 @@ class RoutingAgent:
         graph.add_node("privacy", self._privacy_node)
         graph.add_node("retrieve", self._retrieve_node)
         graph.add_node("fast_path", self._fast_path_node)
+        graph.add_node("policy_escalate", self._policy_escalation_node)
         graph.add_node("ood_escalate", self._ood_escalation_node)
         graph.add_node("triage", self._triage_node)
         graph.add_node("generate", self._generate_node)
@@ -80,10 +82,12 @@ class RoutingAgent:
             {
                 "fast_path": "fast_path",
                 "generative_rag": "triage",
+                "policy_escalate": "policy_escalate",
                 "ood_escalate": "ood_escalate",
             },
         )
         graph.add_edge("fast_path", END)
+        graph.add_edge("policy_escalate", END)
         graph.add_edge("ood_escalate", END)
         graph.add_edge("triage", "generate")
         graph.add_edge("generate", "verify")
@@ -204,6 +208,24 @@ class RoutingAgent:
         state["agent_state"] = "ood_escalated"
         return state
 
+    async def _policy_escalation_node(self, state: AgentState) -> AgentState:
+        category, confidence = keyword_category(state["sanitized_text"])
+        privacy_risk = self._privacy_risk(state)
+        state["assigned_category"] = normalize_category(category)
+        state["classification_confidence"] = round(float(confidence), 4)
+        state["verifier_score"] = 0.0
+        state["privacy_risk"] = privacy_risk
+        state["confidence_score"] = round(max(0.0, min(1.0, 0.35 * confidence + 0.25 * state.get("retrieval_similarity", 0.0))), 4)
+        state["suggested_resolution"] = [
+            f"Escalate to a human reviewer: {state.get('review_reason') or 'high-risk ticket policy matched'}.",
+            "Preserve evidence, confirm business impact, identify the accountable owner, and require approved change or incident response handling before remediation.",
+        ]
+        state["escalation_required"] = True
+        state["route_path"] = "human_review_required"
+        state["semantic_cache_hit"] = False
+        state["agent_state"] = "policy_escalated"
+        return state
+
     async def _triage_node(self, state: AgentState) -> AgentState:
         retrieved = state.get("retrieved", [])
         if retrieved:
@@ -247,10 +269,18 @@ class RoutingAgent:
         state["verifier_score"] = round(verification.score, 4)
         state["privacy_risk"] = round(privacy_risk, 4)
         state["confidence_score"] = round(max(0.0, min(1.0, confidence)), 4)
+        grounded_resolution = (
+            state.get("retrieval_similarity", 0.0) >= self.settings.rag_similarity_threshold
+            and verification.score >= 0.70
+            and privacy_risk <= 0.15
+        )
         state["escalation_required"] = (
-            state["confidence_score"] < self.settings.routing_confidence_threshold
-            or state.get("retrieval_similarity", 0.0) < 0.20
-            or verification.score < 0.70
+            not grounded_resolution
+            and (
+                state["confidence_score"] < self.settings.routing_confidence_threshold
+                or state.get("retrieval_similarity", 0.0) < self.settings.rag_similarity_threshold
+                or verification.score < 0.70
+            )
         )
         state["agent_state"] = "verification_complete"
         return state
@@ -261,6 +291,10 @@ class RoutingAgent:
 
     def _route_after_retrieval(self, state: AgentState) -> str:
         similarity = state.get("retrieval_similarity", 0.0)
+        review_reason = self._human_review_reason(state)
+        if review_reason:
+            state["review_reason"] = review_reason
+            return "policy_escalate"
         if state.get("fast_path_match") is not None:
             return "fast_path"
         if similarity >= self.settings.rag_similarity_threshold:
@@ -279,6 +313,36 @@ class RoutingAgent:
 
     def _privacy_risk(self, state: AgentState) -> float:
         return round(min(0.4, state.get("redacted_count", 0) * 0.05), 4)
+
+    def _human_review_reason(self, state: AgentState) -> str | None:
+        request = state["request"]
+        text = state["sanitized_text"].lower()
+        if request.urgency == 1 or request.impact == 1:
+            return "critical urgency or impact requires human review"
+        high_risk_terms = [
+            "unauthorized",
+            "bulk export",
+            "another merchant",
+            "corruption",
+            "production restore",
+            "privileged",
+            "oauth",
+            "audit logs",
+            "duplicate payment",
+            "duplicate charge",
+            "fee calculation mismatch",
+            "different total",
+            "financial discrepancies",
+            "incorrect processing rates",
+            "outage across",
+            "queue depth",
+            "crashing",
+            "security",
+            "compliance",
+        ]
+        if any(term in text for term in high_risk_terms):
+            return "security, compliance, payment, or production-risk signal matched"
+        return None
 
     def _to_response(self, state: AgentState) -> dict:
         retrieved = state.get("retrieved", [])

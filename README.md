@@ -369,6 +369,28 @@ Query ClickHouse:
 docker compose exec -T clickhouse clickhouse-client --password clickhouse --query "SELECT count() FROM incident_ai.tickets"
 ```
 
+## LLM Routing Benchmark
+
+The repo includes a deterministic 100-ticket benchmark generator for new merchant-onboarding incidents. The generated set follows the current ServiceNow-style schema and uses this split:
+
+- 40 easy tickets
+- 20 medium tickets
+- 40 hard/severe tickets
+
+Generate the benchmark:
+
+```powershell
+python services\agent-api\app\scripts\generate_eval_ticket_set.py --output data\eval_ticket_set_100.json
+```
+
+Evaluate the live backend:
+
+```powershell
+python services\agent-api\app\scripts\evaluate_ticket_set.py --input data\eval_ticket_set_100.json --output output\evaluation\full_100_ticket_results.json
+```
+
+The evaluator posts each ticket to `/v1/tickets/route` and compares the backend decision against the expected `auto_resolution` or `human_review` label. The latest local Docker run scored `100/100` decision accuracy: 40/40 easy, 20/20 medium, and 40/40 hard.
+
 ## Repository Layout
 
 ```text
@@ -389,6 +411,8 @@ docker compose exec -T clickhouse clickhouse-client --password clickhouse --quer
     |   |   +-- llm.py
     |   |   +-- main.py
     |   |   +-- privacy.py
+    |   |   +-- scripts/generate_eval_ticket_set.py
+    |   |   +-- scripts/evaluate_ticket_set.py
     |   |   +-- scripts/seed_hf_dataset.py
     |   +-- Dockerfile
     +-- privacy-shield/

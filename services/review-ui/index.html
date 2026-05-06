@@ -3,241 +3,291 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Incident AI Operations</title>
+  <title>IncidentOps AI Operations</title>
   <style>
+    @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Space+Grotesk:wght@500;600;700&display=swap");
+
     :root {
       color-scheme: light;
-      --nav: #18202b;
-      --nav-2: #202a37;
-      --bg: #f5f7fa;
-      --panel: #ffffff;
-      --line: #d8dee8;
-      --line-strong: #c2cad6;
-      --text: #182230;
-      --muted: #667085;
-      --teal: #0f766e;
-      --teal-soft: #ccfbef;
-      --cyan: #0284c7;
-      --cyan-soft: #e0f2fe;
-      --amber: #b45309;
-      --amber-soft: #fff7ed;
-      --red: #b42318;
-      --red-soft: #fef3f2;
-      --green: #027a48;
-      --green-soft: #ecfdf3;
+      --surface: #fbf9f8;
+      --surface-lowest: #ffffff;
+      --surface-low: #f5f3f3;
+      --surface-container: #efeded;
+      --surface-high: #eae8e7;
+      --surface-highest: #e4e2e2;
+      --text: #1b1c1c;
+      --muted: #444748;
+      --line: #c4c7c7;
+      --line-strong: #747878;
+      --primary: #000000;
+      --primary-soft: #1c1b1b;
+      --red: #b71511;
+      --red-bright: #db3327;
+      --red-soft: #ffdad5;
+      --blue: #0055ff;
+      --blue-soft: #dce1ff;
+      --green: #0f6b3d;
+      --green-soft: #d9f2e4;
+      --amber: #8a5600;
+      --amber-soft: #ffe4b8;
+      --shadow: 0 14px 38px rgba(0, 0, 0, .08);
     }
+
     * { box-sizing: border-box; }
-    html, body { height: 100%; }
+    html, body { min-height: 100%; }
     body {
       margin: 0;
-      background: var(--bg);
+      background: var(--surface);
       color: var(--text);
-      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-family: Inter, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
       font-size: 14px;
+      letter-spacing: 0;
     }
     button, input, textarea, select { font: inherit; }
     button { cursor: pointer; }
     .shell {
       min-height: 100vh;
       display: grid;
-      grid-template-columns: 252px minmax(0, 1fr);
+      grid-template-columns: 280px minmax(0, 1fr);
     }
     .rail {
-      background: linear-gradient(180deg, var(--nav), var(--nav-2));
-      color: #f8fafc;
-      padding: 18px 14px;
-      display: flex;
-      flex-direction: column;
-      gap: 18px;
       position: sticky;
       top: 0;
       height: 100vh;
+      display: flex;
+      flex-direction: column;
+      gap: 24px;
+      padding: 20px 14px;
+      background: var(--primary);
+      color: #fff;
+      border-right: 1px solid var(--primary);
     }
     .brand {
-      display: flex;
+      display: grid;
+      grid-template-columns: 44px minmax(0, 1fr);
+      gap: 12px;
       align-items: center;
-      gap: 10px;
-      padding: 2px 6px 12px;
-      border-bottom: 1px solid rgba(255,255,255,.12);
+      padding: 6px 6px 18px;
+      border-bottom: 1px solid #303030;
     }
     .brand-mark {
-      width: 34px;
-      height: 34px;
-      border-radius: 7px;
+      width: 44px;
+      height: 44px;
       display: grid;
       place-items: center;
-      background: var(--teal);
-      font-weight: 800;
+      border: 1px solid #fff;
+      border-radius: 4px;
+      font-family: "Space Grotesk", sans-serif;
+      font-weight: 700;
+      letter-spacing: .05em;
     }
-    .brand strong { display: block; font-size: 15px; }
-    .brand span { display: block; color: #b8c3d3; font-size: 12px; margin-top: 2px; }
+    .brand strong {
+      display: block;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 18px;
+      line-height: 1.15;
+    }
+    .brand span {
+      display: block;
+      margin-top: 4px;
+      color: #c8c6c5;
+      font-size: 12px;
+    }
     .nav {
       display: grid;
-      gap: 5px;
+      gap: 8px;
     }
     .nav button {
       width: 100%;
-      height: 40px;
-      border: 0;
-      border-radius: 6px;
-      padding: 0 10px;
-      display: flex;
+      height: 44px;
+      display: grid;
+      grid-template-columns: 32px minmax(0, 1fr);
       align-items: center;
       gap: 10px;
-      background: transparent;
-      color: #d7dde7;
+      border: 1px solid #303030;
+      border-radius: 4px;
+      background: #101010;
+      color: #f2f0f0;
       text-align: left;
+      padding: 0 10px;
     }
-    .nav button:hover { background: rgba(255,255,255,.08); color: #fff; }
-    .nav button.active { background: rgba(15,118,110,.26); color: #fff; }
-    .nav .ico {
-      width: 22px;
-      height: 22px;
-      border-radius: 6px;
+    .nav button:hover { border-color: #858383; background: #151515; }
+    .nav button.active {
+      background: #fff;
+      color: #000;
+      border-color: #fff;
+    }
+    .ico {
+      width: 28px;
+      height: 28px;
       display: grid;
       place-items: center;
-      background: rgba(255,255,255,.08);
-      font-size: 12px;
-      font-weight: 800;
+      border: 1px solid currentColor;
+      border-radius: 3px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 11px;
+      font-weight: 700;
     }
     .rail-footer {
       margin-top: auto;
-      border: 1px solid rgba(255,255,255,.12);
-      border-radius: 8px;
-      padding: 12px;
-      color: #c8d1df;
       display: grid;
-      gap: 8px;
-      font-size: 12px;
+      gap: 10px;
+      padding: 14px;
+      border: 1px solid #303030;
+      border-radius: 4px;
+      background: #0b0b0b;
+      color: #c8c6c5;
     }
-    .main {
-      min-width: 0;
-      display: flex;
-      flex-direction: column;
-    }
+    .rail-footer strong { color: #fff; font-family: "Space Grotesk", sans-serif; }
+    .main { min-width: 0; }
     .topbar {
-      height: 62px;
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      min-height: 72px;
       display: flex;
       align-items: center;
       justify-content: space-between;
-      gap: 18px;
-      padding: 0 24px;
-      background: #fff;
+      gap: 16px;
+      padding: 16px 24px;
+      background: rgba(251, 249, 248, .94);
       border-bottom: 1px solid var(--line);
-      position: sticky;
-      top: 0;
-      z-index: 5;
+      backdrop-filter: blur(10px);
     }
-    .title-wrap h1 {
+    h1, h2, h3 {
       margin: 0;
-      font-size: 18px;
-      line-height: 1.2;
+      font-family: "Space Grotesk", sans-serif;
+      letter-spacing: 0;
     }
+    .title-wrap h1 { font-size: 24px; line-height: 1.25; }
     .title-wrap p {
       margin: 4px 0 0;
       color: var(--muted);
-      font-size: 12px;
+      line-height: 1.4;
     }
     .service-strip {
-      display: flex;
+      display: inline-flex;
       align-items: center;
       gap: 10px;
+      padding: 9px 11px;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-lowest);
       color: var(--muted);
       white-space: nowrap;
-      font-size: 13px;
     }
     .dot {
-      width: 9px;
-      height: 9px;
-      border-radius: 50%;
-      background: var(--amber);
-      box-shadow: 0 0 0 4px rgba(180,83,9,.12);
+      width: 10px;
+      height: 10px;
+      border-radius: 999px;
+      background: var(--red);
+      box-shadow: 0 0 0 4px rgba(183, 21, 17, .12);
     }
     .dot.ok {
       background: var(--green);
-      box-shadow: 0 0 0 4px rgba(2,122,72,.12);
+      box-shadow: 0 0 0 4px rgba(15, 107, 61, .14);
     }
     .content {
-      padding: 22px;
-      max-width: 1480px;
-      width: 100%;
+      width: min(1520px, 100%);
       margin: 0 auto;
+      padding: 24px;
     }
     .page { display: none; }
     .page.active { display: block; }
-    .grid-4 {
+    .grid-4, .grid-3, .grid-2, .stream-layout, .detail-grid {
       display: grid;
-      grid-template-columns: repeat(4, minmax(0, 1fr));
-      gap: 14px;
+      gap: 16px;
     }
-    .grid-3 {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 14px;
-    }
-    .grid-2 {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) minmax(360px, .42fr);
-      gap: 14px;
-    }
+    .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+    .grid-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .grid-2 { grid-template-columns: minmax(0, 1.15fr) minmax(360px, .85fr); }
+    .stream-layout { grid-template-columns: minmax(420px, .9fr) minmax(0, 1.1fr); }
+    .detail-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .detail-stack > .grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .section-gap { margin-top: 16px; }
     .panel, .metric, .table-panel {
-      background: var(--panel);
+      background: var(--surface-lowest);
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 4px;
     }
     .metric {
-      min-height: 116px;
-      padding: 15px;
+      min-height: 126px;
+      padding: 16px;
       display: grid;
       align-content: space-between;
     }
-    .metric span {
-      color: var(--muted);
+    .metric span, label, th, .kicker {
+      font-family: "Space Grotesk", sans-serif;
       font-size: 12px;
-      font-weight: 650;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: var(--muted);
     }
     .metric strong {
       display: block;
-      margin-top: 8px;
-      font-size: 30px;
+      margin-top: 12px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 34px;
       line-height: 1;
+      overflow-wrap: anywhere;
     }
-    .metric small { color: var(--muted); }
+    .detail-stack .metric strong {
+      font-size: 30px;
+      line-height: 1.08;
+    }
+    .metric small { color: var(--muted); line-height: 1.3; }
     .panel-head {
-      min-height: 50px;
+      min-height: 54px;
       display: flex;
       align-items: center;
       justify-content: space-between;
       gap: 12px;
       padding: 14px 16px;
       border-bottom: 1px solid var(--line);
+      background: var(--surface-low);
     }
-    .panel-head h2 {
-      margin: 0;
-      font-size: 15px;
-    }
-    .panel-body { padding: 15px; }
-    .section-gap { margin-top: 14px; }
-    .list {
+    .panel-head h2 { font-size: 18px; }
+    .panel-body { padding: 16px; }
+    .list, .bar-list, .form, .detail-stack {
       display: grid;
-      gap: 9px;
+      gap: 12px;
     }
-    .row-card {
+    .row-card, .feed-item, .detail-module {
       border: 1px solid var(--line);
-      border-radius: 7px;
-      padding: 11px;
+      border-radius: 4px;
       background: #fff;
+      padding: 12px;
+    }
+    .row-card.clickable, .feed-item { cursor: pointer; }
+    .row-card.clickable:hover, .feed-item:hover, .feed-item.selected {
+      border-color: var(--primary);
+      box-shadow: inset 4px 0 0 var(--primary);
+    }
+    .feed {
       display: grid;
-      gap: 8px;
+      gap: 10px;
+      max-height: calc(100vh - 210px);
+      overflow: auto;
+      padding-right: 4px;
+    }
+    .feed-item {
+      display: grid;
+      gap: 10px;
+      animation: rise .18s ease-out;
+    }
+    @keyframes rise {
+      from { transform: translateY(4px); opacity: .55; }
+      to { transform: translateY(0); opacity: 1; }
     }
     .row-top {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 10px;
+      gap: 12px;
     }
     .row-title {
-      font-weight: 750;
+      font-weight: 800;
       line-height: 1.35;
     }
     .row-meta {
@@ -248,113 +298,81 @@
       font-size: 12px;
     }
     .ticket-id {
-      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+      font-family: "Space Grotesk", ui-monospace, monospace;
       font-size: 12px;
       color: var(--muted);
     }
     .chip {
       display: inline-flex;
       align-items: center;
-      height: 24px;
-      padding: 0 8px;
-      border-radius: 999px;
-      font-size: 12px;
-      font-weight: 750;
-      background: #eef2f6;
-      color: #344054;
+      min-height: 24px;
+      padding: 4px 8px;
+      border: 1px solid var(--line-strong);
+      border-radius: 3px;
+      background: var(--surface-low);
+      color: var(--text);
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      line-height: 1.1;
     }
-    .chip.teal { background: var(--teal-soft); color: #0f665f; }
-    .chip.cyan { background: var(--cyan-soft); color: #075985; }
-    .chip.amber { background: var(--amber-soft); color: var(--amber); }
-    .chip.red { background: var(--red-soft); color: var(--red); }
-    .chip.green { background: var(--green-soft); color: var(--green); }
-    .bar-list {
-      display: grid;
-      gap: 10px;
-    }
+    .chip.blue { background: var(--blue-soft); border-color: #b6c4ff; color: #0039b3; }
+    .chip.red { background: var(--red-soft); border-color: #ffb4a9; color: #930004; }
+    .chip.green { background: var(--green-soft); border-color: #9cd7b8; color: #064c2a; }
+    .chip.amber { background: var(--amber-soft); border-color: #ffc66d; color: #5c3900; }
+    .chip.dark { background: var(--primary); border-color: var(--primary); color: #fff; }
     .bar-row {
       display: grid;
-      grid-template-columns: minmax(96px, .34fr) minmax(0, 1fr) 48px;
-      gap: 10px;
+      grid-template-columns: minmax(120px, .35fr) minmax(0, 1fr) 52px;
+      gap: 12px;
       align-items: center;
-      font-size: 13px;
     }
-    .bar-track {
-      height: 9px;
+    .bar-track, .confidence {
+      height: 8px;
+      background: var(--surface-container);
+      border: 1px solid var(--line);
       border-radius: 999px;
-      background: #eef2f6;
       overflow: hidden;
     }
-    .bar-fill {
+    .bar-fill, .confidence span {
+      display: block;
       height: 100%;
-      border-radius: inherit;
-      background: linear-gradient(90deg, var(--teal), var(--cyan));
+      background: var(--primary);
     }
+    .confidence span.good { background: var(--green); }
+    .confidence span.warn { background: var(--amber); }
+    .confidence span.risk { background: var(--red); }
     table {
       width: 100%;
       border-collapse: collapse;
     }
     th, td {
-      padding: 11px 12px;
+      padding: 12px;
       border-bottom: 1px solid var(--line);
       text-align: left;
       vertical-align: top;
     }
-    th {
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 750;
-      background: #fbfcfe;
-    }
+    th { background: var(--surface-low); }
     tr:last-child td { border-bottom: 0; }
-    .feed {
-      display: grid;
-      gap: 10px;
-      max-height: calc(100vh - 170px);
-      overflow: auto;
-      padding-right: 4px;
-    }
-    .feed-item {
-      position: relative;
-      border: 1px solid var(--line);
-      border-left: 4px solid var(--cyan);
-      border-radius: 8px;
-      background: #fff;
-      padding: 12px;
-      animation: rise .22s ease-out;
-    }
-    @keyframes rise {
-      from { transform: translateY(5px); opacity: .45; }
-      to { transform: translateY(0); opacity: 1; }
-    }
-    .form {
-      display: grid;
-      gap: 12px;
-    }
-    label {
-      display: block;
-      font-size: 12px;
-      color: var(--muted);
-      font-weight: 750;
-      margin-bottom: 6px;
-    }
     input, textarea, select {
       width: 100%;
       border: 1px solid var(--line-strong);
-      border-radius: 6px;
+      border-radius: 4px;
       background: #fff;
       color: var(--text);
-      padding: 10px 11px;
+      padding: 11px 12px;
       outline: 0;
     }
     textarea {
-      min-height: 148px;
+      min-height: 160px;
       resize: vertical;
-      line-height: 1.45;
+      line-height: 1.5;
     }
     input:focus, textarea:focus, select:focus {
-      border-color: var(--teal);
-      box-shadow: 0 0 0 3px rgba(15,118,110,.14);
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(0, 85, 255, .12);
     }
     .split-fields {
       display: grid;
@@ -364,97 +382,134 @@
     .actions {
       display: flex;
       flex-wrap: wrap;
-      gap: 9px;
+      gap: 8px;
       align-items: center;
     }
     .btn {
-      height: 39px;
-      border: 0;
-      border-radius: 6px;
-      padding: 0 13px;
-      background: var(--teal);
+      min-height: 40px;
+      border: 1px solid var(--primary);
+      border-radius: 4px;
+      padding: 0 14px;
+      background: var(--primary);
       color: #fff;
-      font-weight: 800;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: 13px;
+      font-weight: 600;
     }
-    .btn:hover { background: #115e59; }
+    .btn:hover { background: #202020; }
     .btn.secondary {
-      background: #e8edf4;
-      color: var(--text);
+      background: #fff;
+      color: var(--primary);
     }
-    .btn.secondary:hover { background: #dde4ee; }
-    .btn.warn {
-      background: var(--amber);
-      color: #fff;
+    .btn.secondary:hover { background: var(--surface-container); }
+    .btn.red {
+      background: var(--red);
+      border-color: var(--red);
     }
     .btn:disabled { opacity: .62; cursor: wait; }
-    .confidence {
-      height: 8px;
-      border-radius: 999px;
-      background: #eef2f6;
-      overflow: hidden;
-    }
-    .confidence span {
-      display: block;
-      height: 100%;
-      background: linear-gradient(90deg, var(--amber), var(--teal));
-    }
-    .empty {
-      min-height: 120px;
-      display: grid;
-      place-items: center;
-      color: var(--muted);
-      text-align: center;
-      border: 1px dashed var(--line-strong);
-      border-radius: 8px;
-      padding: 18px;
-    }
-    .raw {
-      max-height: 340px;
-      overflow: auto;
+    .raw, .text-block {
       margin: 0;
       padding: 12px;
-      border-radius: 7px;
-      background: #101828;
-      color: #f8fafc;
-      font-size: 12px;
-      line-height: 1.45;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      background: var(--surface-low);
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.5;
+      white-space: pre-wrap;
+      overflow: auto;
+      max-height: 340px;
+    }
+    .text-block.dark {
+      background: #101010;
+      color: #f2f0f0;
+      border-color: #303030;
+    }
+    .status-line {
+      display: grid;
+      grid-template-columns: 120px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      padding: 10px 0;
+      border-bottom: 1px solid var(--line);
+    }
+    .status-line:last-child { border-bottom: 0; }
+    .empty {
+      min-height: 150px;
+      display: grid;
+      place-items: center;
+      text-align: center;
+      padding: 20px;
+      border: 1px dashed var(--line-strong);
+      border-radius: 4px;
+      color: var(--muted);
+      background: var(--surface-lowest);
     }
     .search-row {
       display: flex;
       gap: 10px;
       align-items: center;
     }
-    .search-row input { max-width: 420px; }
+    .search-row input { min-width: min(420px, 54vw); }
+    .filter-grid {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+      align-items: end;
+    }
+    .result-row {
+      display: grid;
+      grid-template-columns: minmax(220px, 1.1fr) repeat(3, minmax(120px, .45fr)) 150px;
+      gap: 12px;
+      align-items: center;
+      border: 1px solid var(--line);
+      border-radius: 4px;
+      padding: 12px;
+      background: #fff;
+      cursor: pointer;
+    }
+    .result-row:hover {
+      border-color: var(--primary);
+      box-shadow: inset 4px 0 0 var(--primary);
+    }
     .toast {
       position: fixed;
-      right: 18px;
-      bottom: 18px;
-      background: #18202b;
-      color: #fff;
-      border-radius: 8px;
-      padding: 12px 14px;
+      right: 20px;
+      bottom: 20px;
+      z-index: 40;
       display: none;
-      z-index: 20;
-      box-shadow: 0 10px 24px rgba(16,24,40,.2);
+      max-width: 420px;
+      padding: 12px 14px;
+      border: 1px solid #303030;
+      border-radius: 4px;
+      background: #101010;
+      color: #fff;
+      box-shadow: var(--shadow);
     }
     .toast.show { display: block; }
-    @media (max-width: 1040px) {
+    ol {
+      margin: 0;
+      padding-left: 20px;
+    }
+    li { margin: 8px 0; line-height: 1.45; }
+    @media (max-width: 1180px) {
       .shell { grid-template-columns: 1fr; }
       .rail {
         position: relative;
         height: auto;
       }
-      .nav {
-        grid-template-columns: repeat(4, minmax(0, 1fr));
-      }
+      .nav { grid-template-columns: repeat(4, minmax(0, 1fr)); }
       .rail-footer { display: none; }
-      .grid-4, .grid-3, .grid-2 { grid-template-columns: 1fr; }
+      .grid-4, .grid-3, .grid-2, .stream-layout, .detail-grid { grid-template-columns: 1fr; }
+      .feed { max-height: none; }
     }
-    @media (max-width: 680px) {
-      .topbar { align-items: flex-start; height: auto; padding: 14px; flex-direction: column; }
-      .content { padding: 14px; }
+    @media (max-width: 720px) {
+      .topbar { align-items: flex-start; flex-direction: column; }
+      .content { padding: 16px; }
       .nav { grid-template-columns: repeat(2, minmax(0, 1fr)); }
       .split-fields { grid-template-columns: 1fr; }
+      .filter-grid, .result-row { grid-template-columns: 1fr; }
+      .bar-row { grid-template-columns: 1fr; }
       th:nth-child(4), td:nth-child(4) { display: none; }
     }
   </style>
@@ -466,13 +521,13 @@
         <div class="brand-mark">AI</div>
         <div>
           <strong>IncidentOps AI</strong>
-          <span>routing, RAG, privacy</span>
+          <span>Agentic routing console</span>
         </div>
       </div>
       <nav id="nav" class="nav"></nav>
       <div class="rail-footer">
-        <span>Live backend</span>
-        <strong id="railCounts">waiting for metrics</strong>
+        <span class="kicker">Live Backend</span>
+        <strong id="railCounts">Waiting for metrics</strong>
       </div>
     </aside>
 
@@ -488,6 +543,8 @@
       <main class="content">
         <section id="page-dashboard" class="page active"></section>
         <section id="page-stream" class="page"></section>
+        <section id="page-search" class="page"></section>
+        <section id="page-ticket" class="page"></section>
         <section id="page-route" class="page"></section>
         <section id="page-escalations" class="page"></section>
         <section id="page-audit" class="page"></section>
@@ -499,23 +556,29 @@
   <div id="toast" class="toast"></div>
 
   <script>
+    const initialRoute = parseRouteFromHash();
     const pages = [
-      ["dashboard", "DB", "Dashboard", "Live KPIs, routing load, privacy findings."],
-      ["stream", "ST", "Ticket Stream", "Incoming tickets flowing from the backend dataset and routed events."],
+      ["dashboard", "DB", "Dashboard", "Live KPIs, routing load, confidence, privacy findings."],
+      ["stream", "ST", "Ticket Stream", "Click any live ticket to inspect full context and resolution status."],
+      ["search", "SR", "Search", "Search tickets with category, status, source, and routing filters."],
+      ["ticket", "TK", "Ticket Detail", "Complete ticket context, routing state, and resolution evidence."],
       ["route", "RT", "Routing Desk", "Classify, retrieve, resolve, verify, and escalate."],
-      ["escalations", "ES", "Escalations", "Human-review queue for uncertain decisions."],
+      ["escalations", "ES", "Escalations", "Human-review queue for uncertain or high-risk decisions."],
       ["audit", "AU", "Privacy Audit", "Redaction findings and policy evidence."],
       ["knowledge", "KB", "Knowledge Base", "Sanitized historical incidents powering RAG."],
-      ["evaluation", "EV", "Evaluation", "Accuracy, confidence, retrieval, and usability signals."]
+      ["evaluation", "EV", "Evaluation", "Accuracy, confidence, retrieval, and benchmark signals."]
     ];
+    const navPages = pages.filter(([id]) => id !== "ticket");
 
     const state = {
-      current: location.hash.replace("#/", "") || "dashboard",
+      current: initialRoute.page,
       health: null,
       dashboard: null,
       streamTickets: [],
+      selectedTicketId: initialRoute.ticketId,
+      selectedTicketDetail: null,
+      search: { results: [], facets: null, filters: { q: "", category: "", assignment_group: "", source: "", route_path: "", status: "", urgency: "", impact: "", limit: 80 } },
       routeResult: null,
-      lastStreamTicket: null,
       escalations: [],
       audit: [],
       knowledge: [],
@@ -526,9 +589,18 @@
     const $ = (id) => document.getElementById(id);
     const pct = (n) => `${Math.round((Number(n) || 0) * 100)}%`;
     const num = (n) => new Intl.NumberFormat().format(Number(n) || 0);
+    const toneFor = (value) => Number(value) >= .85 ? "good" : Number(value) >= .7 ? "warn" : "risk";
 
     function html(value) {
       return String(value ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#039;" }[c]));
+    }
+
+    function parseRouteFromHash() {
+      const raw = location.hash.replace("#/", "") || "dashboard";
+      if (raw.startsWith("ticket/")) {
+        return { page: "ticket", ticketId: decodeURIComponent(raw.slice("ticket/".length)) };
+      }
+      return { page: raw, ticketId: null };
     }
 
     async function api(path, options) {
@@ -539,27 +611,32 @@
     }
 
     function initNav() {
-      $("nav").innerHTML = pages.map(([id, icon, label]) => `
+      $("nav").innerHTML = navPages.map(([id, icon, label]) => `
         <button data-page="${id}" class="${state.current === id ? "active" : ""}">
           <span class="ico">${icon}</span><span>${label}</span>
         </button>
       `).join("");
       $("nav").addEventListener("click", (event) => {
         const button = event.target.closest("button[data-page]");
-        if (!button) return;
-        navigate(button.dataset.page);
+        if (button) navigate(button.dataset.page);
       });
     }
 
-    function navigate(page) {
+    function navigate(page, ticketId = null) {
       state.current = page;
-      location.hash = `/${page}`;
+      if (page === "ticket" && ticketId) {
+        state.selectedTicketId = ticketId;
+        state.selectedTicketDetail = null;
+        location.hash = `/ticket/${encodeURIComponent(ticketId)}`;
+      } else {
+        location.hash = `/${page}`;
+      }
       for (const el of document.querySelectorAll(".page")) el.classList.remove("active");
       $(`page-${page}`).classList.add("active");
       for (const el of document.querySelectorAll(".nav button")) el.classList.toggle("active", el.dataset.page === page);
       const meta = pages.find(([id]) => id === page);
-      $("pageTitle").textContent = meta[2];
-      $("pageSub").textContent = meta[3];
+      $("pageTitle").textContent = meta?.[2] || "Ticket Detail";
+      $("pageSub").textContent = meta?.[3] || "Complete ticket context and resolution evidence.";
       refreshPage(page);
     }
 
@@ -568,16 +645,16 @@
         state.health = await api("/v1/health");
         $("healthDot").className = state.health.status === "ok" ? "dot ok" : "dot";
         $("healthText").textContent = state.health.nvidia_configured
-          ? `API ready, ${state.health.model}`
-          : "API ready, model key missing";
+          ? `API ready - ${state.health.model}`
+          : "API ready - model key missing";
       } catch (error) {
-        $("healthText").textContent = `API unavailable: ${error.message}`;
+        $("healthText").textContent = `API unavailable - ${error.message}`;
       }
     }
 
     async function refreshDashboard() {
       state.dashboard = await api("/v1/dashboard");
-      $("railCounts").textContent = `${num(state.dashboard.tickets_total)} tickets, ${num(state.dashboard.routing_decisions_total)} routed`;
+      $("railCounts").textContent = `${num(state.dashboard.tickets_total)} tickets - ${num(state.dashboard.routing_decisions_total)} routed`;
       renderDashboard();
     }
 
@@ -585,6 +662,8 @@
       try {
         if (page === "dashboard") await refreshDashboard();
         if (page === "stream") await refreshRecentTickets();
+        if (page === "search") await refreshSearch();
+        if (page === "ticket") await refreshTicketDetailPage();
         if (page === "route") renderRoute();
         if (page === "escalations") await refreshEscalations();
         if (page === "audit") await refreshAudit();
@@ -602,42 +681,38 @@
       $("page-dashboard").innerHTML = `
         <div class="grid-4">
           ${metric("Tickets", num(d.tickets_total), `${d.categories.length} active categories`)}
-          ${metric("Routed", num(d.routing.decisions), `${num(d.routing.semantic_cache_hits)} cache hits`)}
-          ${metric("Avg Confidence", pct(d.routing.avg_confidence), `${Math.round(d.routing.avg_latency_ms)} ms avg latency`)}
-          ${metric("Privacy Findings", num(d.privacy_findings_total), `${d.privacy_by_type.length} entity types`)}
+          ${metric("Routed", num(d.routing.decisions), `${num(d.routing.semantic_cache_hits)} semantic cache hits`)}
+          ${metric("Confidence", pct(d.routing.avg_confidence), `${Math.round(d.routing.avg_latency_ms)} ms avg latency`)}
+          ${metric("Privacy", num(d.privacy_findings_total), `${d.privacy_by_type.length} entity types`)}
         </div>
         <div class="grid-2 section-gap">
           <div class="panel">
-            <div class="panel-head"><h2>Category Load</h2><span class="chip cyan">classification layer</span></div>
-            <div class="panel-body bar-list">
-              ${d.categories.map((item) => bar(item.name, item.count, maxCategory)).join("") || empty("No category data yet")}
-            </div>
+            <div class="panel-head"><h2>Category Load</h2><span class="chip blue">classification</span></div>
+            <div class="panel-body bar-list">${d.categories.map((item) => bar(item.name, item.count, maxCategory)).join("") || empty("No category data yet")}</div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>Routing Quality</h2><span class="chip teal">agentic layer</span></div>
+            <div class="panel-head"><h2>Routing Quality</h2><span class="chip dark">agent state</span></div>
             <div class="panel-body">
-              ${qualityRow("Classification", d.routing.avg_confidence)}
-              ${qualityRow("Retrieval", d.routing.avg_retrieval_similarity)}
-              ${qualityRow("Verifier", d.routing.avg_verifier_score)}
+              ${qualityRow("Composite confidence", d.routing.avg_confidence)}
+              ${qualityRow("Retrieval similarity", d.routing.avg_retrieval_similarity)}
+              ${qualityRow("Verifier grounding", d.routing.avg_verifier_score)}
             </div>
           </div>
         </div>
         <div class="grid-2 section-gap">
           <div class="panel">
-            <div class="panel-head"><h2>Recent Tickets</h2><button class="btn secondary" onclick="navigate('stream')">Open stream</button></div>
+            <div class="panel-head"><h2>Recent Tickets</h2><button class="btn secondary" onclick="navigate('stream')">Open Stream</button></div>
             <div class="panel-body list">${d.recent_tickets.map(ticketCard).join("") || empty("No tickets available")}</div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>Fast-Path Routing</h2><span class="chip">conditional edges</span></div>
+            <div class="panel-head"><h2>Decision Routes</h2><span class="chip blue">thresholds from API</span></div>
             <div class="panel-body bar-list">
-              <div class="grid-3 compact-metrics">
+              <div class="grid-3">
                 ${metric("Fast Path", pct(thresholds.fast_path_similarity || 0), "semantic cache")}
                 ${metric("RAG", pct(thresholds.rag_similarity || 0), "generation")}
-                ${metric("Confidence", pct(thresholds.confidence || 0), "auto resolve")}
+                ${metric("Auto Resolve", pct(thresholds.confidence || 0), "confidence")}
               </div>
               ${d.routing.route_paths.map((item) => bar(item.name, item.count, Math.max(1, ...d.routing.route_paths.map((x) => x.count)))).join("") || empty("No routing decisions yet")}
-              <div style="height:1px;background:var(--line);margin:5px 0;"></div>
-              ${d.assignment_groups.map((item) => bar(item.name, item.count, Math.max(1, ...d.assignment_groups.map((x) => x.count)))).join("") || ""}
             </div>
           </div>
         </div>
@@ -645,8 +720,10 @@
     }
 
     async function refreshRecentTickets() {
-      const data = await api("/v1/tickets/recent?limit=40");
+      const data = await api("/v1/tickets/recent?limit=80");
       state.streamTickets = mergeTickets(state.streamTickets, data.tickets);
+      if (!state.selectedTicketId && state.streamTickets.length) state.selectedTicketId = state.streamTickets[0].ticket_id;
+      if (state.selectedTicketId && !state.selectedTicketDetail) await loadTicketDetail(state.selectedTicketId, false);
       renderStream();
     }
 
@@ -655,8 +732,8 @@
       state.eventSource = new EventSource("/api/v1/tickets/stream?interval_ms=1600&window=200");
       state.eventSource.addEventListener("ticket", (event) => {
         const ticket = JSON.parse(event.data);
-        state.lastStreamTicket = ticket;
-        state.streamTickets = mergeTickets([ticket], state.streamTickets).slice(0, 60);
+        state.streamTickets = mergeTickets([ticket], state.streamTickets).slice(0, 100);
+        if (!state.selectedTicketId) state.selectedTicketId = ticket.ticket_id;
         if (state.current === "stream") renderStream();
       });
       state.eventSource.onerror = () => {
@@ -664,63 +741,287 @@
       };
     }
 
+    async function selectTicket(ticketId) {
+      navigate("ticket", ticketId);
+    }
+
+    async function loadTicketDetail(ticketId, shouldRender = true) {
+      try {
+        state.selectedTicketDetail = await api(`/v1/tickets/detail/${encodeURIComponent(ticketId)}`);
+      } catch (error) {
+        state.selectedTicketDetail = { error: error.message, ticket: { ticket_id: ticketId } };
+      }
+      if (shouldRender && state.current === "ticket") renderTicketDetailPage();
+    }
+
+    async function refreshTicketDetailPage() {
+      if (!state.selectedTicketId) {
+        $("page-ticket").innerHTML = empty("Select a ticket from Search, Ticket Stream, Dashboard, Escalations, or Knowledge Base.");
+        return;
+      }
+      if (!state.selectedTicketDetail || state.selectedTicketDetail.ticket?.ticket_id !== state.selectedTicketId) {
+        $("page-ticket").innerHTML = empty("Loading ticket detail");
+        await loadTicketDetail(state.selectedTicketId, false);
+      }
+      renderTicketDetailPage();
+    }
+
+    function renderTicketDetailPage() {
+      $("page-ticket").innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Ticket Detail</h2>
+            <div class="actions">
+              <button class="btn secondary" onclick="navigate('search')">Back To Search</button>
+              <button class="btn secondary" onclick="stageSelectedTicket()">Stage For Routing</button>
+            </div>
+          </div>
+          <div class="panel-body">${ticketDetailBlock()}</div>
+        </div>
+      `;
+    }
+
     function renderStream() {
       $("page-stream").innerHTML = `
         <div class="grid-2">
           <div class="panel">
-            <div class="panel-head"><h2>Incoming Ticket Feed</h2><span class="chip cyan">SSE live</span></div>
+            <div class="panel-head">
+              <h2>Live Ticket Feed</h2>
+              <div class="actions">
+                <button class="btn secondary" onclick="navigate('search')">Open Search</button>
+                <button class="btn secondary" onclick="refreshRecentTickets()">Refresh</button>
+              </div>
+            </div>
             <div class="panel-body">
               <div class="feed">${state.streamTickets.map(streamCard).join("") || empty("Waiting for backend ticket events")}</div>
             </div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>Stream Detail</h2><button class="btn secondary" onclick="refreshRecentTickets()">Refresh</button></div>
-            <div class="panel-body">
-              ${state.lastStreamTicket ? detailBlock(state.lastStreamTicket) : empty("Select or wait for a streamed ticket")}
+            <div class="panel-head"><h2>Stream Controls</h2><span class="chip blue">click opens detail page</span></div>
+            <div class="panel-body list">
+              ${metric("Buffered", num(state.streamTickets.length), "tickets in browser")}
+              ${metric("Detail Page", "#/ticket/{id}", "all ticket clicks route here")}
+              <div class="text-block">Click any ticket in the live stream to open its dedicated detail page with routing status, resolution, matched historical ticket, confidence components, and privacy audit evidence.</div>
             </div>
           </div>
         </div>
       `;
     }
 
+    function ticketDetailBlock() {
+      const detail = state.selectedTicketDetail;
+      if (!state.selectedTicketId && !detail) return empty("Click a streamed ticket to inspect its full routing and resolution status");
+      if (!detail) return empty("Loading ticket detail");
+      if (detail.error) return empty(detail.error);
+      const ticket = detail.ticket || {};
+      const routing = detail.routing;
+      return `
+        <div class="detail-stack">
+          <div class="row-top">
+            <div>
+              <div class="kicker">${html(ticket.ticket_id)} - ${html(ticket.source)}</div>
+              <h2>${html(ticket.short_description)}</h2>
+            </div>
+            ${statusChip(detail.status)}
+          </div>
+          <div class="grid-4">
+            ${metric("Urgency", `U${ticket.urgency}`, "reported priority")}
+            ${metric("Impact", `I${ticket.impact}`, "business scope")}
+            ${metric("Category", ticket.category || "Unassigned", ticket.assignment_group || "no group")}
+            ${metric("Created", shortTime(ticket.created_at), "ticket time")}
+          </div>
+          ${routing ? routingSummary(routing) : empty("This ticket is in the knowledge stream but has not been routed yet")}
+          <div class="detail-grid">
+            <div class="detail-module">
+              <span class="kicker">Sanitized Ticket Text</span>
+              <div class="text-block">${html(ticket.sanitized_text || ticket.description || "")}</div>
+            </div>
+            <div class="detail-module">
+              <span class="kicker">Resolution Status</span>
+              ${resolutionStatus(detail)}
+            </div>
+          </div>
+          ${routing ? `<div class="detail-module"><span class="kicker">Suggested Resolution</span><ol>${routing.suggested_resolution.map((step) => `<li>${html(step)}</li>`).join("")}</ol></div>` : ""}
+          ${detail.matched_ticket ? matchedTicketBlock(detail.matched_ticket) : ""}
+          ${privacyBlock(detail.privacy_audit || [])}
+        </div>
+      `;
+    }
+
+    async function refreshSearch() {
+      if (!state.search.facets || !state.search.results.length) {
+        await executeSearch(false);
+      } else {
+        renderSearch();
+      }
+    }
+
+    async function executeSearch(shouldRender = true) {
+      const params = new URLSearchParams();
+      const filters = state.search.filters;
+      for (const [key, value] of Object.entries(filters)) {
+        if (value !== "" && value !== null && value !== undefined) params.set(key, value);
+      }
+      const data = await api(`/v1/tickets/search?${params.toString()}`);
+      state.search.results = data.tickets;
+      state.search.facets = data.facets;
+      state.search.filters = { ...state.search.filters, ...data.filters };
+      if (shouldRender || state.current === "search") renderSearch();
+    }
+
+    function renderSearch() {
+      const facets = state.search.facets || { categories: [], assignment_groups: [], sources: [], route_paths: [], statuses: [] };
+      const filters = state.search.filters;
+      $("page-search").innerHTML = `
+        <div class="panel">
+          <div class="panel-head">
+            <h2>Ticket Search</h2>
+            <span class="chip blue">${num(state.search.results.length)} results</span>
+          </div>
+          <div class="panel-body form">
+            <div>
+              <label for="searchQ">Search Text</label>
+              <input id="searchQ" value="${html(filters.q || "")}" placeholder="Ticket ID, number, symptom, sanitized text">
+            </div>
+            <div class="filter-grid">
+              ${selectFilter("searchCategory", "Category", "category", facets.categories)}
+              ${selectFilter("searchGroup", "Assignment Group", "assignment_group", facets.assignment_groups)}
+              ${selectFilter("searchStatus", "Status", "status", facets.statuses)}
+              ${selectFilter("searchRoute", "Route Path", "route_path", facets.route_paths)}
+              ${selectFilter("searchSource", "Source", "source", facets.sources)}
+              ${selectFilter("searchUrgency", "Urgency", "urgency", ["1", "2", "3"])}
+              ${selectFilter("searchImpact", "Impact", "impact", ["1", "2", "3"])}
+              ${selectFilter("searchLimit", "Limit", "limit", ["40", "80", "120", "200", "300"])}
+            </div>
+            <div class="actions">
+              <button class="btn" onclick="applySearchFilters()">Search Tickets</button>
+              <button class="btn secondary" onclick="resetSearchFilters()">Reset Filters</button>
+            </div>
+          </div>
+        </div>
+        <div class="panel section-gap">
+          <div class="panel-head"><h2>Results</h2><span class="chip dark">click row for full detail page</span></div>
+          <div class="panel-body list">${state.search.results.map(searchResultRow).join("") || empty("No tickets match the current filters")}</div>
+        </div>
+      `;
+    }
+
+    function selectFilter(id, label, key, values) {
+      const current = String(state.search.filters[key] ?? "");
+      return `<div>
+        <label for="${id}">${html(label)}</label>
+        <select id="${id}" data-filter="${key}">
+          <option value="">Any</option>
+          ${(values || []).map((value) => `<option value="${html(value)}" ${String(value) === current ? "selected" : ""}>${html(formatRoute(value))}</option>`).join("")}
+        </select>
+      </div>`;
+    }
+
+    function applySearchFilters() {
+      const filters = { ...state.search.filters, q: $("searchQ").value.trim() };
+      for (const select of document.querySelectorAll("#page-search select[data-filter]")) {
+        filters[select.dataset.filter] = select.value;
+      }
+      state.search.filters = filters;
+      executeSearch(true).catch((error) => toast(error.message));
+    }
+
+    function resetSearchFilters() {
+      state.search.filters = { q: "", category: "", assignment_group: "", source: "", route_path: "", status: "", urgency: "", impact: "", limit: 80 };
+      executeSearch(true).catch((error) => toast(error.message));
+    }
+
+    function searchResultRow(ticket) {
+      const tone = ticket.status === "human_review_required" ? "red" : ticket.status === "unrouted" ? "amber" : "green";
+      return `<div class="result-row" onclick="navigate('ticket', '${html(ticket.ticket_id)}')">
+        <div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)} - ${html(ticket.number)}</span></div>
+        <div>${chip(ticket.category, "blue")}<div class="row-meta"><span>${html(ticket.assignment_group)}</span></div></div>
+        <div>${chip(formatRoute(ticket.status), tone)}<div class="row-meta"><span>${html(formatRoute(ticket.route_path))}</span></div></div>
+        <div>${confidence(ticket.confidence_score)}<div class="row-meta"><span>${pct(ticket.confidence_score)} confidence</span></div></div>
+        <div class="row-meta"><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(shortTime(ticket.created_at))}</span></div>
+      </div>`;
+    }
+
+    function routingSummary(routing) {
+      return `
+        <div class="grid-4">
+          ${metric("Route Path", formatRoute(routing.route_path), routing.semantic_cache_hit ? "LLM bypassed" : "agentic route")}
+          ${metric("Confidence", pct(routing.confidence_score), "composite score")}
+          ${metric("Verifier", pct(routing.confidence_components.verifier_score), "grounding score")}
+          ${metric("Latency", `${routing.latency_ms} ms`, routing.model_name || "model")}
+        </div>
+        <div class="detail-module">
+          <span class="kicker">Confidence Components</span>
+          ${qualityRow("Classification", routing.confidence_components.classification)}
+          ${qualityRow("Retrieval similarity", routing.confidence_components.retrieval_similarity)}
+          ${qualityRow("Verifier grounding", routing.confidence_components.verifier_score)}
+          ${qualityRow("Privacy risk", routing.confidence_components.privacy_risk)}
+        </div>
+      `;
+    }
+
+    function resolutionStatus(detail) {
+      const routing = detail.routing;
+      if (!routing) {
+        return `<div class="status-line"><span class="kicker">State</span><div>Unrouted knowledge-base ticket. Use Routing Desk to create a decision.</div></div>`;
+      }
+      const finalState = routing.escalation_required
+        ? "Human review required before final resolution"
+        : routing.semantic_cache_hit
+          ? "Resolved through approved semantic cache"
+          : "Resolved through generative RAG and verifier gate";
+      return `
+        <div class="status-line"><span class="kicker">Privacy</span><div>Sanitized before model or retrieval exposure.</div></div>
+        <div class="status-line"><span class="kicker">Retrieval</span><div>Nearest match: ${html(routing.matched_ticket_id || "none")} - ${pct(routing.confidence_components.retrieval_similarity)}</div></div>
+        <div class="status-line"><span class="kicker">Decision</span><div>${html(routing.route_path)} - ${routing.escalation_required ? "escalated" : "auto-resolved"}</div></div>
+        <div class="status-line"><span class="kicker">Final</span><div>${html(finalState)}</div></div>
+      `;
+    }
+
+    function matchedTicketBlock(ticket) {
+      return `<div class="detail-module">
+        <span class="kicker">Matched Historical Ticket</span>
+        <div class="row-top"><div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)} - ${html(ticket.source)}</span></div>${chip(ticket.category, "blue")}</div>
+        <div class="text-block">${html(ticket.resolution || "")}</div>
+      </div>`;
+    }
+
+    function privacyBlock(findings) {
+      if (!findings.length) {
+        return `<div class="detail-module"><span class="kicker">Privacy Audit</span><div class="text-block">No sensitive entities were detected for this ticket.</div></div>`;
+      }
+      return `<div class="detail-module">
+        <span class="kicker">Privacy Audit</span>
+        <table><thead><tr><th>Entity</th><th>Placeholder</th><th>Confidence</th><th>Policy</th></tr></thead>
+        <tbody>${findings.map((item) => `<tr><td>${chip(item.entity_type, "red")}</td><td><span class="ticket-id">${html(item.placeholder)}</span></td><td>${pct(item.confidence)}</td><td>${html(item.policy_version)}</td></tr>`).join("")}</tbody></table>
+      </div>`;
+    }
+
     function renderRoute() {
       $("page-route").innerHTML = `
         <div class="grid-2">
           <div class="panel">
-            <div class="panel-head"><h2>Routing Workbench</h2><span class="chip teal">privacy shield first</span></div>
+            <div class="panel-head"><h2>Routing Workbench</h2><span class="chip dark">privacy shield first</span></div>
             <div class="panel-body">
               <form id="routeForm" class="form">
-                <div>
-                  <label for="shortDescription">Short description</label>
-                  <input id="shortDescription" required>
-                </div>
-                <div>
-                  <label for="description">Description</label>
-                  <textarea id="description" required></textarea>
-                </div>
+                <div><label for="shortDescription">Short Description</label><input id="shortDescription" required></div>
+                <div><label for="description">Description</label><textarea id="description" required></textarea></div>
                 <div class="split-fields">
-                  <div>
-                    <label for="urgency">Urgency</label>
-                    <select id="urgency"><option value="1">1 - High</option><option value="2">2 - Medium</option><option value="3" selected>3 - Low</option></select>
-                  </div>
-                  <div>
-                    <label for="impact">Impact</label>
-                    <select id="impact"><option value="1">1 - High</option><option value="2">2 - Medium</option><option value="3" selected>3 - Low</option></select>
-                  </div>
+                  <div><label for="urgency">Urgency</label><select id="urgency"><option value="1">1 - High</option><option value="2">2 - Medium</option><option value="3" selected>3 - Low</option></select></div>
+                  <div><label for="impact">Impact</label><select id="impact"><option value="1">1 - High</option><option value="2">2 - Medium</option><option value="3" selected>3 - Low</option></select></div>
                 </div>
                 <div class="actions">
-                  <button class="btn" type="submit">Route ticket</button>
-                  <button class="btn secondary" type="button" onclick="loadLatestIntoRoute()">Use latest stream ticket</button>
+                  <button class="btn" type="submit">Route Ticket</button>
+                  <button class="btn secondary" type="button" onclick="stageSelectedTicket()">Use Selected Stream Ticket</button>
                 </div>
               </form>
             </div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>Agent Decision</h2><span class="chip">LangGraph state</span></div>
+            <div class="panel-head"><h2>Agent Decision</h2><span class="chip blue">LangGraph state</span></div>
             <div class="panel-body" id="routeResult">${state.routeResult ? routeResultBlock(state.routeResult) : empty("No routing decision yet")}</div>
           </div>
-        </div>
-      `;
+        </div>`;
       $("routeForm").addEventListener("submit", routeCurrentForm);
     }
 
@@ -741,69 +1042,67 @@
           })
         });
         $("routeResult").innerHTML = routeResultBlock(state.routeResult);
+        state.selectedTicketId = state.routeResult.ticket_id;
+        state.selectedTicketDetail = null;
+        loadTicketDetail(state.selectedTicketId, false);
         refreshDashboard();
       } catch (error) {
         toast(error.message);
       } finally {
         button.disabled = false;
-        button.textContent = "Route ticket";
+        button.textContent = "Route Ticket";
       }
     }
 
-    function loadLatestIntoRoute() {
-      const ticket = state.lastStreamTicket || state.streamTickets[0];
-      if (!ticket) return toast("No streamed ticket is available yet");
-      $("shortDescription").value = ticket.short_description || "";
-      $("description").value = ticket.sanitized_text || "";
-      $("urgency").value = String(ticket.urgency || 3);
-      $("impact").value = String(ticket.impact || 3);
+    function stageSelectedTicket() {
+      const detail = state.selectedTicketDetail;
+      const ticket = detail?.ticket || state.streamTickets.find((item) => item.ticket_id === state.selectedTicketId);
+      if (!ticket) return toast("Select a streamed ticket first");
+      navigate("route");
+      setTimeout(() => {
+        $("shortDescription").value = ticket.short_description || "";
+        $("description").value = ticket.sanitized_text || ticket.description || "";
+        $("urgency").value = String(ticket.urgency || 3);
+        $("impact").value = String(ticket.impact || 3);
+      }, 0);
     }
 
     async function refreshEscalations() {
-      state.escalations = (await api("/v1/escalations?limit=80")).escalations;
+      state.escalations = (await api("/v1/escalations?limit=100")).escalations;
       $("page-escalations").innerHTML = `
         <div class="table-panel">
           <div class="panel-head"><h2>Human Review Queue</h2><span class="chip amber">${num(state.escalations.length)} open</span></div>
           <table>
-            <thead><tr><th>Ticket</th><th>Category</th><th>Route Path</th><th>Confidence</th><th>Verifier</th><th>Resolution Draft</th></tr></thead>
+            <thead><tr><th>Ticket</th><th>Category</th><th>Route</th><th>Confidence</th><th>Verifier</th><th>Draft</th></tr></thead>
             <tbody>${state.escalations.map((item) => `
               <tr>
-                <td><span class="ticket-id">${html(item.ticket_id)}</span></td>
+                <td><button class="btn secondary" onclick="openTicketFromTable('${html(item.ticket_id)}')">${html(item.ticket_id)}</button></td>
                 <td>${chip(item.assigned_category, "amber")}</td>
-                <td>${chip(item.route_path, item.route_path === "out_of_distribution" ? "red" : "amber")}</td>
+                <td>${chip(item.route_path, item.route_path === "human_review_required" ? "red" : "amber")}</td>
                 <td>${confidence(item.confidence_score)} ${pct(item.confidence_score)}</td>
                 <td>${pct(item.verifier_score)}</td>
                 <td>${html(item.suggested_resolution).slice(0, 260)}</td>
-              </tr>
-            `).join("") || `<tr><td colspan="6">${empty("No escalations yet")}</td></tr>`}</tbody>
+              </tr>`).join("") || `<tr><td colspan="6">${empty("No escalations yet")}</td></tr>`}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     }
 
     async function refreshAudit() {
       state.audit = (await api("/v1/privacy/audit/recent?limit=120")).findings;
       $("page-audit").innerHTML = `
         <div class="table-panel">
-          <div class="panel-head"><h2>Privacy Redaction Evidence</h2><span class="chip red">${num(state.audit.length)} recent findings</span></div>
+          <div class="panel-head"><h2>Privacy Redaction Evidence</h2><span class="chip red">${num(state.audit.length)} findings</span></div>
           <table>
             <thead><tr><th>Ticket</th><th>Entity</th><th>Placeholder</th><th>Confidence</th><th>Policy</th></tr></thead>
             <tbody>${state.audit.map((item) => `
-              <tr>
-                <td><span class="ticket-id">${html(item.ticket_id)}</span></td>
-                <td>${chip(item.entity_type, "red")}</td>
-                <td><span class="ticket-id">${html(item.placeholder)}</span></td>
-                <td>${pct(item.confidence)}</td>
-                <td>${html(item.policy_version)}</td>
-              </tr>
+              <tr><td><span class="ticket-id">${html(item.ticket_id)}</span></td><td>${chip(item.entity_type, "red")}</td><td><span class="ticket-id">${html(item.placeholder)}</span></td><td>${pct(item.confidence)}</td><td>${html(item.policy_version)}</td></tr>
             `).join("") || `<tr><td colspan="5">${empty("No privacy findings yet")}</td></tr>`}</tbody>
           </table>
-        </div>
-      `;
+        </div>`;
     }
 
     async function refreshKnowledge() {
-      state.knowledge = (await api("/v1/knowledge?limit=160")).documents;
+      state.knowledge = (await api("/v1/knowledge?limit=180")).documents;
       renderKnowledge();
     }
 
@@ -812,27 +1111,23 @@
         <div class="panel">
           <div class="panel-head">
             <h2>Sanitized RAG Corpus</h2>
-            <div class="search-row"><input id="knowledgeSearch" placeholder="Search current corpus"><span class="chip cyan">${num(state.knowledge.length)} documents</span></div>
+            <div class="search-row"><input id="knowledgeSearch" placeholder="Search current corpus"><span class="chip blue">${num(state.knowledge.length)} documents</span></div>
           </div>
           <div class="panel-body list" id="knowledgeList"></div>
-        </div>
-      `;
+        </div>`;
       $("knowledgeSearch").addEventListener("input", renderKnowledgeList);
       renderKnowledgeList();
     }
 
     function renderKnowledgeList() {
       const query = ($("knowledgeSearch")?.value || "").toLowerCase();
-      const docs = state.knowledge.filter((item) => JSON.stringify(item).toLowerCase().includes(query)).slice(0, 60);
+      const docs = state.knowledge.filter((item) => JSON.stringify(item).toLowerCase().includes(query)).slice(0, 70);
       $("knowledgeList").innerHTML = docs.map((item) => `
-        <div class="row-card">
-          <div class="row-top"><div><div class="row-title">${html(item.short_description)}</div><span class="ticket-id">${html(item.ticket_id)}</span></div>${chip(item.category, "cyan")}</div>
-          <div class="row-meta"><span>${html(item.assignment_group)}</span><span>${html(item.source)}</span></div>
-          <div>${html(item.sanitized_text).slice(0, 280)}</div>
-          <div class="chip green">resolution</div>
-          <div>${html(item.resolution).slice(0, 320)}</div>
-        </div>
-      `).join("") || empty("No matching knowledge documents");
+        <div class="row-card clickable" onclick="openTicketFromTable('${html(item.ticket_id)}')">
+          <div class="row-top"><div><div class="row-title">${html(item.short_description)}</div><span class="ticket-id">${html(item.ticket_id)} - ${html(item.source)}</span></div>${chip(item.category, "blue")}</div>
+          <div class="row-meta"><span>${html(item.assignment_group)}</span><span>${html(item.created_at)}</span></div>
+          <div class="text-block">${html(item.sanitized_text).slice(0, 360)}</div>
+        </div>`).join("") || empty("No matching knowledge documents");
     }
 
     async function refreshEvaluation() {
@@ -840,13 +1135,13 @@
       const e = state.evaluation;
       $("page-evaluation").innerHTML = `
         <div class="grid-4">
-          ${metric("Dataset Rows", num(e.dataset_rows), `${num(e.labeled_categories)} labels`)}
-          ${metric("Routed Tickets", num(e.routed_tickets), `${pct(e.escalation_rate)} escalation rate`)}
+          ${metric("Dataset", num(e.dataset_rows), `${num(e.labeled_categories)} labels`)}
+          ${metric("Routed", num(e.routed_tickets), `${pct(e.escalation_rate)} escalation rate`)}
           ${metric("Retrieval", pct(e.avg_retrieval_similarity), "semantic similarity")}
-          ${metric("Cache Hits", pct(e.semantic_cache_hit_rate), `${Math.round(e.avg_latency_ms)} ms avg latency`)}
+          ${metric("Cache", pct(e.semantic_cache_hit_rate), `${Math.round(e.avg_latency_ms)} ms avg latency`)}
         </div>
         <div class="panel section-gap">
-          <div class="panel-head"><h2>Evaluation Signals</h2><span class="chip teal">live backend metrics</span></div>
+          <div class="panel-head"><h2>Evaluation Signals</h2><span class="chip dark">live backend metrics</span></div>
           <div class="panel-body">
             ${qualityRow("Composite confidence", e.avg_confidence)}
             ${qualityRow("Retrieval similarity", e.avg_retrieval_similarity)}
@@ -854,89 +1149,83 @@
             ${qualityRow("Semantic cache hit rate", e.semantic_cache_hit_rate)}
             ${qualityRow("Escalation pressure", e.escalation_rate)}
           </div>
-        </div>
-      `;
+        </div>`;
     }
 
     function metric(label, value, detail) {
       return `<div class="metric"><span>${html(label)}</span><strong>${html(value)}</strong><small>${html(detail)}</small></div>`;
     }
-
     function bar(label, value, max) {
       return `<div class="bar-row"><span>${html(label)}</span><div class="bar-track"><div class="bar-fill" style="width:${Math.max(4, value / max * 100)}%"></div></div><strong>${num(value)}</strong></div>`;
     }
-
     function qualityRow(label, value) {
-      return `<div style="display:grid;gap:7px;margin-bottom:14px;"><div class="row-top"><strong>${html(label)}</strong><span>${pct(value)}</span></div>${confidence(value)}</div>`;
+      return `<div style="display:grid;gap:8px;margin-bottom:14px;"><div class="row-top"><strong>${html(label)}</strong><span>${pct(value)}</span></div>${confidence(value)}</div>`;
     }
-
     function confidence(value) {
-      return `<div class="confidence"><span style="width:${Math.max(2, Math.min(100, (Number(value) || 0) * 100))}%"></span></div>`;
+      const v = Math.max(2, Math.min(100, (Number(value) || 0) * 100));
+      return `<div class="confidence"><span class="${toneFor(value)}" style="width:${v}%"></span></div>`;
     }
-
     function chip(text, tone = "") {
       return `<span class="chip ${tone}">${html(text || "Unassigned")}</span>`;
     }
-
+    function statusChip(status) {
+      const tone = status === "human_review_required" ? "red" : status === "unrouted" ? "amber" : "green";
+      return chip(formatRoute(status || "unknown"), tone);
+    }
     function ticketCard(ticket) {
-      return `<div class="row-card">
-        <div class="row-top"><div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)}</span></div>${chip(ticket.category, "teal")}</div>
+      return `<div class="row-card clickable" onclick="openTicketFromTable('${html(ticket.ticket_id)}')">
+        <div class="row-top"><div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)}</span></div>${chip(ticket.category, "blue")}</div>
         <div class="row-meta"><span>${html(ticket.assignment_group)}</span><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(ticket.created_at)}</span></div>
       </div>`;
     }
-
     function streamCard(ticket) {
-      return `<div class="feed-item">
-        <div class="row-top"><div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)}</span></div>${chip(ticket.category, "cyan")}</div>
-        <div class="row-meta"><span>${html(ticket.assignment_group)}</span><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(ticket.source || "")}</span></div>
-        <div class="actions"><button class="btn secondary" onclick="stageTicket('${html(ticket.ticket_id)}')">Stage for routing</button></div>
+      const selected = ticket.ticket_id === state.selectedTicketId ? "selected" : "";
+      return `<div class="feed-item ${selected}" onclick="selectTicket('${html(ticket.ticket_id)}')">
+        <div class="row-top"><div><div class="row-title">${html(ticket.short_description)}</div><span class="ticket-id">${html(ticket.ticket_id)}</span></div>${chip(ticket.category, "blue")}</div>
+        <div class="row-meta"><span>${html(ticket.assignment_group)}</span><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(ticket.source || "")}</span><span>${html(ticket.created_at || "")}</span></div>
       </div>`;
     }
-
-    function detailBlock(ticket) {
-      return `<div class="list">
-        ${ticketCard(ticket)}
-        <pre class="raw">${html(JSON.stringify(ticket, null, 2))}</pre>
-      </div>`;
-    }
-
     function routeResultBlock(result) {
-      return `<div class="list">
-        <div class="row-card">
-          <div class="row-top"><div><div class="row-title">${html(result.ticket_id)}</div><span class="ticket-id">${html(result.agent_state)}</span></div>${result.escalation_required ? chip("escalate", "amber") : chip("resolved", "green")}</div>
-          ${confidence(result.confidence_score)}
-          <div class="grid-3">
-            ${metric("Category", result.assigned_category, "assigned group")}
-            ${metric("Confidence", pct(result.confidence_score), "composite")}
-            ${metric("Redactions", result.redacted_entities_count, "privacy shield")}
-            ${metric("Route Path", result.route_path, result.semantic_cache_hit ? "LLM bypassed" : "agentic path")}
-            ${metric("Matched Ticket", result.matched_ticket_id || "none", "nearest neighbor")}
-            ${metric("Latency", `${result.routing_latency_ms} ms`, "end to end")}
-          </div>
-        </div>
-        <div class="row-card"><strong>Suggested resolution</strong><ol>${(result.suggested_resolution || []).map((step) => `<li>${html(step)}</li>`).join("")}</ol></div>
-        <pre class="raw">${html(JSON.stringify(result, null, 2))}</pre>
-      </div>`;
+      const detail = {
+        ticket: { ticket_id: result.ticket_id, short_description: result.ticket_id, urgency: "-", impact: "-", category: result.assigned_category, assignment_group: "agent decision", source: "route response", created_at: "now", sanitized_text: "" },
+        status: result.escalation_required ? "human_review_required" : "resolved",
+        routing: {
+          ...result,
+          latency_ms: result.routing_latency_ms,
+          suggested_resolution: result.suggested_resolution,
+          model_name: state.health?.model || ""
+        },
+        privacy_audit: []
+      };
+      return ticketDetailBlockFrom(detail);
     }
-
-    function stageTicket(ticketId) {
-      const ticket = state.streamTickets.find((item) => item.ticket_id === ticketId);
-      if (!ticket) return;
-      state.lastStreamTicket = ticket;
-      navigate("route");
-      setTimeout(loadLatestIntoRoute, 0);
+    function ticketDetailBlockFrom(detail) {
+      const current = state.selectedTicketDetail;
+      const currentId = state.selectedTicketId;
+      state.selectedTicketDetail = detail;
+      state.selectedTicketId = detail.ticket?.ticket_id || currentId;
+      const htmlValue = ticketDetailBlock();
+      state.selectedTicketDetail = current;
+      state.selectedTicketId = currentId;
+      return htmlValue;
     }
-
+    async function openTicketFromTable(ticketId) {
+      navigate("ticket", ticketId);
+    }
     function mergeTickets(...groups) {
       const map = new Map();
-      groups.flat().filter(Boolean).forEach((item) => map.set(`${item.ticket_id}-${item.stream_sequence || ""}`, item));
-      return Array.from(map.values()).slice(0, 80);
+      groups.flat().filter(Boolean).forEach((item) => map.set(item.ticket_id, item));
+      return Array.from(map.values()).slice(0, 120);
     }
-
     function empty(message) {
       return `<div class="empty">${html(message)}</div>`;
     }
-
+    function shortTime(value) {
+      return String(value || "").replace("T", " ").slice(0, 16) || "-";
+    }
+    function formatRoute(value) {
+      return String(value || "").replaceAll("_", " ");
+    }
     function toast(message) {
       $("toast").textContent = message;
       $("toast").classList.add("show");
@@ -945,8 +1234,11 @@
 
     window.navigate = navigate;
     window.refreshRecentTickets = refreshRecentTickets;
-    window.loadLatestIntoRoute = loadLatestIntoRoute;
-    window.stageTicket = stageTicket;
+    window.selectTicket = selectTicket;
+    window.stageSelectedTicket = stageSelectedTicket;
+    window.openTicketFromTable = openTicketFromTable;
+    window.applySearchFilters = applySearchFilters;
+    window.resetSearchFilters = resetSearchFilters;
 
     initNav();
     navigate(state.current);
