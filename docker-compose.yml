@@ -1,0 +1,114 @@
+services:
+  redpanda:
+    image: redpandadata/redpanda:v24.3.5
+    command:
+      - redpanda
+      - start
+      - --overprovisioned
+      - --smp=1
+      - --memory=512M
+      - --reserve-memory=0M
+      - --node-id=0
+      - --check=false
+      - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+    ports:
+      - "19092:19092"
+      - "9644:9644"
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.*true'"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12
+    environment:
+      CLICKHOUSE_DB: incident_ai
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    ports:
+      - "8123:8123"
+      - "9000:9000"
+    volumes:
+      - ./infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
+      - clickhouse-data:/var/lib/clickhouse
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:8123/ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+
+  privacy-shield:
+    build:
+      context: ./services/privacy-shield
+    environment:
+      REDPANDA_BROKERS: redpanda:9092
+      HTTP_ADDR: ":8080"
+    ports:
+      - "8080:8080"
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  api-gateway:
+    build:
+      context: ./services/agent-api
+    environment:
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DATABASE: incident_ai
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      REDPANDA_BROKERS: redpanda:9092
+      PRIVACY_SHIELD_URL: http://privacy-shield:8080
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
+      NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
+      NVIDIA_LLM_MODEL: ${NVIDIA_LLM_MODEL:-meta/llama-3.3-70b-instruct}
+      LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-700}
+      LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
+      LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-12}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
+      ROUTING_CONFIDENCE_THRESHOLD: ${ROUTING_CONFIDENCE_THRESHOLD:-0.85}
+      FAST_PATH_SIMILARITY_THRESHOLD: ${FAST_PATH_SIMILARITY_THRESHOLD:-0.95}
+      RAG_SIMILARITY_THRESHOLD: ${RAG_SIMILARITY_THRESHOLD:-0.70}
+      RAG_TOP_K: ${RAG_TOP_K:-5}
+    ports:
+      - "8000:8000"
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy
+      privacy-shield:
+        condition: service_started
+
+  review-ui:
+    build:
+      context: ./services/review-ui
+    ports:
+      - "8081:80"
+    depends_on:
+      api-gateway:
+        condition: service_started
+
+  prometheus:
+    image: prom/prometheus:v2.55.1
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    ports:
+      - "3000:3000"
+    environment:
+      GF_SECURITY_ADMIN_PASSWORD: admin
+    volumes:
+      - grafana-data:/var/lib/grafana
+
+volumes:
+  clickhouse-data:
+  grafana-data:
