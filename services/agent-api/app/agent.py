@@ -38,6 +38,11 @@ class AgentState(TypedDict, total=False):
     semantic_cache_hit: bool
     matched_ticket_id: str | None
     review_reason: str | None
+    sla_risk_score: float
+    sla_risk_level: str
+    knowledge_gap: dict
+    resolver_recommendation: dict
+    route_explanation: list[dict[str, str]]
 
 
 class RoutingAgent:
@@ -66,6 +71,7 @@ class RoutingAgent:
         graph = StateGraph(AgentState)
         graph.add_node("privacy", self._privacy_node)
         graph.add_node("retrieve", self._retrieve_node)
+        graph.add_node("assess", self._assessment_node)
         graph.add_node("fast_path", self._fast_path_node)
         graph.add_node("policy_escalate", self._policy_escalation_node)
         graph.add_node("ood_escalate", self._ood_escalation_node)
@@ -76,8 +82,9 @@ class RoutingAgent:
 
         graph.set_entry_point("privacy")
         graph.add_edge("privacy", "retrieve")
+        graph.add_edge("retrieve", "assess")
         graph.add_conditional_edges(
-            "retrieve",
+            "assess",
             self._route_after_retrieval,
             {
                 "fast_path": "fast_path",
@@ -174,6 +181,16 @@ class RoutingAgent:
         state["agent_state"] = "retrieval_complete"
         return state
 
+    async def _assessment_node(self, state: AgentState) -> AgentState:
+        review_reason = self._human_review_reason(state)
+        if review_reason:
+            state["review_reason"] = review_reason
+        state["knowledge_gap"] = self._knowledge_gap_signal(state)
+        state["resolver_recommendation"] = self._resolver_recommendation(state)
+        self._refresh_operational_metadata(state)
+        state["agent_state"] = "assessment_complete"
+        return state
+
     async def _fast_path_node(self, state: AgentState) -> AgentState:
         matched = state.get("fast_path_match") or state.get("retrieved", [])[0]
         privacy_risk = self._privacy_risk(state)
@@ -187,6 +204,7 @@ class RoutingAgent:
         state["route_path"] = "semantic_cache"
         state["semantic_cache_hit"] = True
         state["matched_ticket_id"] = matched.ticket_id
+        self._refresh_operational_metadata(state)
         state["agent_state"] = "semantic_cache_hit"
         return state
 
@@ -205,6 +223,8 @@ class RoutingAgent:
         state["escalation_required"] = True
         state["route_path"] = "out_of_distribution"
         state["semantic_cache_hit"] = False
+        state["knowledge_gap"] = self._knowledge_gap_signal(state)
+        self._refresh_operational_metadata(state)
         state["agent_state"] = "ood_escalated"
         return state
 
@@ -223,6 +243,8 @@ class RoutingAgent:
         state["escalation_required"] = True
         state["route_path"] = "human_review_required"
         state["semantic_cache_hit"] = False
+        state["knowledge_gap"] = self._knowledge_gap_signal(state)
+        self._refresh_operational_metadata(state)
         state["agent_state"] = "policy_escalated"
         return state
 
@@ -282,6 +304,8 @@ class RoutingAgent:
                 or verification.score < 0.70
             )
         )
+        state["knowledge_gap"] = self._knowledge_gap_signal(state)
+        self._refresh_operational_metadata(state)
         state["agent_state"] = "verification_complete"
         return state
 
@@ -291,9 +315,7 @@ class RoutingAgent:
 
     def _route_after_retrieval(self, state: AgentState) -> str:
         similarity = state.get("retrieval_similarity", 0.0)
-        review_reason = self._human_review_reason(state)
-        if review_reason:
-            state["review_reason"] = review_reason
+        if state.get("review_reason"):
             return "policy_escalate"
         if state.get("fast_path_match") is not None:
             return "fast_path"
@@ -313,6 +335,150 @@ class RoutingAgent:
 
     def _privacy_risk(self, state: AgentState) -> float:
         return round(min(0.4, state.get("redacted_count", 0) * 0.05), 4)
+
+    def _knowledge_gap_signal(self, state: AgentState) -> dict:
+        similarity = state.get("retrieval_similarity", 0.0)
+        verifier = state.get("verifier_score")
+        route_path = state.get("route_path", "retrieved")
+        if similarity < self.settings.rag_similarity_threshold:
+            severity = "critical" if similarity < 0.50 else "elevated"
+            return {
+                "is_gap": True,
+                "reason": "nearest approved ticket is below the RAG similarity threshold",
+                "severity": severity,
+            }
+        if verifier is not None and verifier < 0.70 and route_path == "generative_rag":
+            return {
+                "is_gap": True,
+                "reason": "generated resolution failed verifier grounding threshold",
+                "severity": "elevated",
+            }
+        return {
+            "is_gap": False,
+            "reason": "approved historical context is sufficient for this route",
+            "severity": "normal",
+        }
+
+    def _resolver_recommendation(self, state: AgentState) -> dict:
+        retrieved = state.get("retrieved", [])
+        weights: Counter[str] = Counter()
+        for item in retrieved:
+            if item.assignment_group and item.assignment_group != "Pending Review":
+                weights[item.assignment_group] += max(item.similarity, 0.0)
+        if weights:
+            total = sum(weights.values()) or 1.0
+            ranked = weights.most_common(4)
+            return {
+                "group": ranked[0][0],
+                "confidence": round(max(0.0, min(1.0, ranked[0][1] / total)), 4),
+                "source": "retrieval_consensus",
+                "alternates": [name for name, _ in ranked[1:]],
+            }
+        fallback = {
+            "Network": "Network Ops",
+            "Access Management": "IT Support",
+            "Security": "Security",
+            "Database": "IT Support",
+            "Storage": "IT Support",
+            "Infrastructure": "IT Support",
+            "Application": "IT Support",
+        }
+        group = fallback.get(state.get("assigned_category", ""), "IT Support")
+        return {
+            "group": group,
+            "confidence": 0.45,
+            "source": "category_default",
+            "alternates": [],
+        }
+
+    def _sla_risk(self, state: AgentState) -> tuple[float, str]:
+        request = state["request"]
+        priority_risk = ((4 - request.urgency) + (4 - request.impact)) / 6
+        confidence = state.get("confidence_score")
+        if confidence is None:
+            resolver = state.get("resolver_recommendation", {})
+            confidence = (
+                0.70 * max(0.0, state.get("retrieval_similarity", 0.0))
+                + 0.30 * float(resolver.get("confidence", 0.0))
+            )
+        uncertainty = 1.0 - max(0.0, min(1.0, float(confidence)))
+        retrieval_gap = max(0.0, self.settings.rag_similarity_threshold - state.get("retrieval_similarity", 0.0)) / max(
+            self.settings.rag_similarity_threshold,
+            0.01,
+        )
+        verifier_score = state.get("verifier_score", 0.70) or 0.70
+        verifier_gap = max(0.0, 0.70 - verifier_score) / 0.70
+        escalation_bonus = 0.15 if state.get("escalation_required") else 0.0
+        score = (
+            0.45 * priority_risk
+            + 0.25 * uncertainty
+            + 0.15 * retrieval_gap
+            + 0.10 * verifier_gap
+            + 0.05 * state.get("privacy_risk", self._privacy_risk(state))
+            + escalation_bonus
+        )
+        score = round(max(0.0, min(1.0, score)), 4)
+        if score >= 0.75:
+            return score, "critical"
+        if score >= 0.55:
+            return score, "elevated"
+        if score >= 0.35:
+            return score, "watch"
+        return score, "normal"
+
+    def _refresh_operational_metadata(self, state: AgentState) -> None:
+        if "resolver_recommendation" not in state:
+            state["resolver_recommendation"] = self._resolver_recommendation(state)
+        if "knowledge_gap" not in state:
+            state["knowledge_gap"] = self._knowledge_gap_signal(state)
+        score, level = self._sla_risk(state)
+        state["sla_risk_score"] = score
+        state["sla_risk_level"] = level
+        state["route_explanation"] = self._route_explanation(state)
+
+    def _route_explanation(self, state: AgentState) -> list[dict[str, str]]:
+        retrieval_similarity = state.get("retrieval_similarity", 0.0)
+        resolver = state.get("resolver_recommendation", {})
+        gap = state.get("knowledge_gap", {})
+        route_path = state.get("route_path", "retrieved")
+        if state.get("semantic_cache_hit"):
+            route_impact = "approved historical resolution returned without invoking the LLM"
+        elif state.get("escalation_required"):
+            route_impact = state.get("review_reason") or "confidence gates require human review"
+        else:
+            route_impact = "retrieved context was sent through generation and verifier gates"
+        return [
+            {
+                "label": "Privacy gate",
+                "value": f"{state.get('redacted_count', 0)} redactions",
+                "impact": "only sanitized text is available to retrieval and model calls",
+            },
+            {
+                "label": "Nearest approved ticket",
+                "value": f"{state.get('matched_ticket_id') or 'none'} at {retrieval_similarity:.2f}",
+                "impact": "similarity determines fast path, generative RAG, or OOD escalation",
+            },
+            {
+                "label": "Route branch",
+                "value": route_path,
+                "impact": route_impact,
+            },
+            {
+                "label": "Resolver recommendation",
+                "value": f"{resolver.get('group', 'Unassigned')} at {float(resolver.get('confidence', 0.0)):.2f}",
+                "impact": f"source: {resolver.get('source', 'unknown')}",
+            },
+            {
+                "label": "SLA risk",
+                "value": f"{state.get('sla_risk_level', 'normal')} at {state.get('sla_risk_score', 0.0):.2f}",
+                "impact": "priority, confidence, retrieval gap, verifier gap, and privacy risk combined",
+            },
+            {
+                "label": "Knowledge coverage",
+                "value": "gap detected" if gap.get("is_gap") else "covered",
+                "impact": gap.get("reason", "not evaluated"),
+            },
+        ]
 
     def _human_review_reason(self, state: AgentState) -> str | None:
         request = state["request"]
@@ -365,6 +531,13 @@ class RoutingAgent:
             "route_path": state.get("route_path", "generative_rag"),
             "semantic_cache_hit": bool(state.get("semantic_cache_hit", False)),
             "matched_ticket_id": state.get("matched_ticket_id"),
+            "sla_risk": {
+                "score": state.get("sla_risk_score", 0.0),
+                "level": state.get("sla_risk_level", "normal"),
+            },
+            "knowledge_gap": state.get("knowledge_gap", self._knowledge_gap_signal(state)),
+            "resolver_recommendation": state.get("resolver_recommendation", self._resolver_recommendation(state)),
+            "route_explanation": state.get("route_explanation", self._route_explanation(state)),
         }
 
     def _store_ticket(self, request: TicketRequest, state: AgentState) -> None:

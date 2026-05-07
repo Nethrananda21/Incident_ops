@@ -52,8 +52,30 @@ CREATE TABLE IF NOT EXISTS incident_ai.routing_decisions
     route_path String DEFAULT 'generative_rag',
     semantic_cache_hit UInt8 DEFAULT 0,
     matched_ticket_id String DEFAULT '',
+    sla_risk_score Float32 DEFAULT 0,
+    sla_risk_level String DEFAULT '',
+    resolver_group String DEFAULT '',
+    resolver_confidence Float32 DEFAULT 0,
+    knowledge_gap UInt8 DEFAULT 0,
+    knowledge_gap_reason String DEFAULT '',
+    route_explanation String DEFAULT '',
     model_name String,
     latency_ms UInt32,
+    created_at DateTime DEFAULT now()
+)
+ENGINE = MergeTree
+ORDER BY (ticket_id, created_at);
+
+CREATE TABLE IF NOT EXISTS incident_ai.review_events
+(
+    review_id String,
+    ticket_id String,
+    decision String,
+    reviewer String,
+    notes String,
+    corrected_category String DEFAULT '',
+    corrected_assignment_group String DEFAULT '',
+    corrected_resolution String DEFAULT '',
     created_at DateTime DEFAULT now()
 )
 ENGINE = MergeTree

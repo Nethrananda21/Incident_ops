@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
 from typing import Any
 from uuid import uuid4
@@ -38,6 +39,8 @@ class RetrievedTicket:
 
 
 class ClickHouseRepository:
+    _schema_checked = False
+
     def __init__(self, settings: Settings):
         self.settings = settings
         self.client = clickhouse_connect.get_client(
@@ -47,6 +50,42 @@ class ClickHouseRepository:
             password=settings.clickhouse_password,
             database=settings.clickhouse_database,
             autogenerate_session_id=False,
+        )
+        if not ClickHouseRepository._schema_checked:
+            self.ensure_operational_schema()
+            ClickHouseRepository._schema_checked = True
+
+    def ensure_operational_schema(self) -> None:
+        columns = [
+            ("sla_risk_score", "Float32 DEFAULT 0"),
+            ("sla_risk_level", "String DEFAULT ''"),
+            ("resolver_group", "String DEFAULT ''"),
+            ("resolver_confidence", "Float32 DEFAULT 0"),
+            ("knowledge_gap", "UInt8 DEFAULT 0"),
+            ("knowledge_gap_reason", "String DEFAULT ''"),
+            ("route_explanation", "String DEFAULT ''"),
+        ]
+        for name, definition in columns:
+            self.client.command(
+                f"ALTER TABLE routing_decisions ADD COLUMN IF NOT EXISTS {name} {definition}"
+            )
+        self.client.command(
+            """
+            CREATE TABLE IF NOT EXISTS review_events
+            (
+                review_id String,
+                ticket_id String,
+                decision String,
+                reviewer String,
+                notes String,
+                corrected_category String DEFAULT '',
+                corrected_assignment_group String DEFAULT '',
+                corrected_resolution String DEFAULT '',
+                created_at DateTime DEFAULT now()
+            )
+            ENGINE = MergeTree
+            ORDER BY (ticket_id, created_at)
+            """
         )
 
     def ping(self) -> bool:
@@ -148,6 +187,13 @@ class ClickHouseRepository:
                 decision["route_path"],
                 1 if decision["semantic_cache_hit"] else 0,
                 decision.get("matched_ticket_id") or "",
+                decision["sla_risk"]["score"],
+                decision["sla_risk"]["level"],
+                decision["resolver_recommendation"]["group"],
+                decision["resolver_recommendation"]["confidence"],
+                1 if decision["knowledge_gap"]["is_gap"] else 0,
+                decision["knowledge_gap"]["reason"],
+                json.dumps(decision["route_explanation"], separators=(",", ":")),
                 decision["model_name"],
                 decision["routing_latency_ms"],
             ]],
@@ -164,10 +210,44 @@ class ClickHouseRepository:
                 "route_path",
                 "semantic_cache_hit",
                 "matched_ticket_id",
+                "sla_risk_score",
+                "sla_risk_level",
+                "resolver_group",
+                "resolver_confidence",
+                "knowledge_gap",
+                "knowledge_gap_reason",
+                "route_explanation",
                 "model_name",
                 "latency_ms",
             ],
         )
+
+    def insert_review_event(self, decision: dict[str, Any]) -> str:
+        review_id = str(uuid4())
+        self.client.insert(
+            "review_events",
+            [[
+                review_id,
+                decision["ticket_id"],
+                decision["decision"],
+                decision["reviewer"],
+                decision.get("notes") or "",
+                decision.get("corrected_category") or "",
+                decision.get("corrected_assignment_group") or "",
+                decision.get("corrected_resolution") or "",
+            ]],
+            column_names=[
+                "review_id",
+                "ticket_id",
+                "decision",
+                "reviewer",
+                "notes",
+                "corrected_category",
+                "corrected_assignment_group",
+                "corrected_resolution",
+            ],
+        )
+        return review_id
 
     def insert_privacy_audit(
         self,

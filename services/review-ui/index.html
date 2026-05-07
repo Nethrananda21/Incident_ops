@@ -542,6 +542,7 @@
 
       <main class="content">
         <section id="page-dashboard" class="page active"></section>
+        <section id="page-intelligence" class="page"></section>
         <section id="page-stream" class="page"></section>
         <section id="page-search" class="page"></section>
         <section id="page-ticket" class="page"></section>
@@ -559,6 +560,7 @@
     const initialRoute = parseRouteFromHash();
     const pages = [
       ["dashboard", "DB", "Dashboard", "Live KPIs, routing load, confidence, privacy findings."],
+      ["intelligence", "IC", "Intelligence", "Routing quality, SLA risk, knowledge gaps, resolver capacity, and feedback loops."],
       ["stream", "ST", "Ticket Stream", "Click any live ticket to inspect full context and resolution status."],
       ["search", "SR", "Search", "Search tickets with category, status, source, and routing filters."],
       ["ticket", "TK", "Ticket Detail", "Complete ticket context, routing state, and resolution evidence."],
@@ -574,6 +576,7 @@
       current: initialRoute.page,
       health: null,
       dashboard: null,
+      intelligence: null,
       streamTickets: [],
       selectedTicketId: initialRoute.ticketId,
       selectedTicketDetail: null,
@@ -661,6 +664,7 @@
     async function refreshPage(page = state.current) {
       try {
         if (page === "dashboard") await refreshDashboard();
+        if (page === "intelligence") await refreshIntelligence();
         if (page === "stream") await refreshRecentTickets();
         if (page === "search") await refreshSearch();
         if (page === "ticket") await refreshTicketDetailPage();
@@ -691,7 +695,7 @@
             <div class="panel-body bar-list">${d.categories.map((item) => bar(item.name, item.count, maxCategory)).join("") || empty("No category data yet")}</div>
           </div>
           <div class="panel">
-            <div class="panel-head"><h2>Routing Quality</h2><span class="chip dark">agent state</span></div>
+            <div class="panel-head"><h2>Routing Quality</h2><button class="btn secondary" onclick="navigate('intelligence')">Open Intelligence</button></div>
             <div class="panel-body">
               ${qualityRow("Composite confidence", d.routing.avg_confidence)}
               ${qualityRow("Retrieval similarity", d.routing.avg_retrieval_similarity)}
@@ -713,6 +717,108 @@
                 ${metric("Auto Resolve", pct(thresholds.confidence || 0), "confidence")}
               </div>
               ${d.routing.route_paths.map((item) => bar(item.name, item.count, Math.max(1, ...d.routing.route_paths.map((x) => x.count)))).join("") || empty("No routing decisions yet")}
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    async function refreshIntelligence() {
+      state.intelligence = await api("/v1/intelligence/routing?limit=800");
+      renderIntelligence();
+    }
+
+    function renderIntelligence() {
+      const i = state.intelligence;
+      const s = i.summary || {};
+      const maxRoute = Math.max(1, ...(i.route_quality || []).map((item) => item.count));
+      $("page-intelligence").innerHTML = `
+        <div class="grid-4">
+          ${metric("Auto Resolution", pct(s.auto_resolution_rate), `${num(s.decisions_analyzed)} decisions analyzed`)}
+          ${metric("Human Review", pct(s.human_review_rate), `${num(s.knowledge_gap_count)} knowledge gaps`)}
+          ${metric("SLA Risk", pct(s.avg_sla_risk), `${num(s.critical_sla_count)} critical tickets`)}
+          ${metric("Feedback", pct(i.feedback?.correction_rate), `${num(i.feedback?.total_events)} review events`)}
+        </div>
+        <div class="grid-2 section-gap">
+          <div class="panel">
+            <div class="panel-head"><h2>Route Quality</h2><span class="chip blue">LangGraph branches</span></div>
+            <div class="panel-body bar-list">
+              ${(i.route_quality || []).map((item) => `
+                <div class="detail-module">
+                  <div class="row-top"><strong>${html(formatRoute(item.route_path))}</strong>${chip(`${num(item.count)} tickets`, item.escalation_rate > .4 ? "red" : "blue")}</div>
+                  ${bar("Volume", item.count, maxRoute)}
+                  ${qualityRow("Confidence", item.avg_confidence)}
+                  ${qualityRow("Retrieval", item.avg_retrieval_similarity)}
+                  <div class="row-meta"><span>${pct(item.escalation_rate)} escalation</span><span>${pct(item.semantic_cache_rate)} cache</span><span>${Math.round(item.avg_latency_ms)} ms avg</span></div>
+                </div>
+              `).join("") || empty("No routing quality data yet")}
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>SLA Risk Queue</h2><span class="chip red">priority + uncertainty</span></div>
+            <div class="panel-body list">
+              ${(i.sla_risk_queue || []).slice(0, 10).map((item) => `
+                <div class="row-card clickable" onclick="openTicketFromTable('${html(item.ticket_id)}')">
+                  <div class="row-top"><div><div class="row-title">${html(item.short_description || item.ticket_id)}</div><span class="ticket-id">${html(item.ticket_id)} - ${html(formatRoute(item.route_path))}</span></div>${riskChip(item.sla_risk_level)}</div>
+                  <div class="row-meta"><span>U${item.urgency}</span><span>I${item.impact}</span><span>${pct(item.sla_risk_score)} SLA risk</span><span>${pct(item.confidence_score)} confidence</span></div>
+                  ${confidence(item.sla_risk_score)}
+                </div>
+              `).join("") || empty("No SLA risk queue yet")}
+            </div>
+          </div>
+        </div>
+        <div class="grid-2 section-gap">
+          <div class="panel">
+            <div class="panel-head"><h2>Knowledge Gaps</h2><span class="chip amber">missing runbooks</span></div>
+            <div class="panel-body list">
+              ${(i.knowledge_gaps || []).map((gap) => `
+                <div class="detail-module">
+                  <div class="row-top"><div><div class="row-title">${html(gap.category)}</div><span class="ticket-id">${html(gap.reason)}</span></div>${riskChip(gap.severity)}</div>
+                  <div class="row-meta"><span>${num(gap.count)} tickets</span><span>${pct(gap.avg_retrieval_similarity)} retrieval</span><span>${pct(gap.avg_verifier_score)} verifier</span></div>
+                  <div class="text-block">${html(gap.recommended_action)}</div>
+                  <div class="list">${(gap.examples || []).map((item) => `<button class="btn secondary" onclick="openTicketFromTable('${html(item.ticket_id)}')">${html(item.ticket_id)} - ${pct(item.sla_risk_score)} risk</button>`).join("")}</div>
+                </div>
+              `).join("") || empty("No knowledge gaps detected")}
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Resolver Capacity</h2><span class="chip dark">load-aware routing</span></div>
+            <div class="panel-body bar-list">
+              ${(i.resolver_capacity || []).map((group) => `
+                <div class="detail-module">
+                  <div class="row-top"><strong>${html(group.group)}</strong>${chip(group.recommendation, group.recommendation === "saturated" ? "red" : group.recommendation === "constrained" ? "amber" : "green")}</div>
+                  ${qualityRow("Load index", group.load_index)}
+                  <div class="row-meta"><span>${num(group.workload)} routed</span><span>${num(group.open_escalations)} escalations</span><span>${num(group.critical_sla)} critical SLA</span><span>${pct(group.avg_confidence)} confidence</span></div>
+                </div>
+              `).join("") || empty("No resolver capacity data yet")}
+            </div>
+          </div>
+        </div>
+        <div class="grid-2 section-gap">
+          <div class="panel">
+            <div class="panel-head"><h2>Human Feedback Loop</h2><span class="chip blue">immutable review events</span></div>
+            <div class="panel-body list">
+              ${(i.feedback?.by_decision || []).map((item) => bar(formatRoute(item.decision), item.count, Math.max(1, i.feedback.total_events))).join("") || empty("No review decisions recorded yet")}
+              ${(i.feedback?.recent || []).slice(0, 6).map((item) => `
+                <div class="row-card clickable" onclick="openTicketFromTable('${html(item.ticket_id)}')">
+                  <div class="row-top"><strong>${html(item.ticket_id)}</strong>${chip(formatRoute(item.decision), item.decision.includes("wrong") || item.decision.includes("misrouted") ? "red" : "blue")}</div>
+                  <div class="row-meta"><span>${html(item.reviewer)}</span><span>${html(shortTime(item.created_at))}</span><span>${html(item.corrected_category || "")}</span></div>
+                  ${item.notes ? `<div class="text-block">${html(item.notes)}</div>` : ""}
+                </div>
+              `).join("")}
+            </div>
+          </div>
+          <div class="panel">
+            <div class="panel-head"><h2>Governance Controls</h2><span class="chip green">audit ready</span></div>
+            <div class="panel-body list">
+              ${metric("Model", i.governance?.model_name || "unknown", "configured via backend environment")}
+              ${metric("Privacy Findings", num(i.governance?.privacy_findings), "redaction audit rows")}
+              ${(i.governance?.controls || []).map((item) => `<div class="status-line"><span class="kicker">Control</span><div>${html(item)}</div></div>`).join("")}
+              <div class="grid-3">
+                ${metric("Fast Path", pct(i.governance?.thresholds?.fast_path_similarity), "cache threshold")}
+                ${metric("RAG", pct(i.governance?.thresholds?.rag_similarity), "generation threshold")}
+                ${metric("Verifier", pct(i.governance?.thresholds?.verifier), "grounding threshold")}
+              </div>
             </div>
           </div>
         </div>
@@ -831,6 +937,7 @@
             ${metric("Created", shortTime(ticket.created_at), "ticket time")}
           </div>
           ${routing ? routingSummary(routing) : empty("This ticket is in the knowledge stream but has not been routed yet")}
+          ${routing ? operationalSignals(detail) : ""}
           <div class="detail-grid">
             <div class="detail-module">
               <span class="kicker">Sanitized Ticket Text</span>
@@ -843,6 +950,7 @@
           </div>
           ${routing ? `<div class="detail-module"><span class="kicker">Suggested Resolution</span><ol>${routing.suggested_resolution.map((step) => `<li>${html(step)}</li>`).join("")}</ol></div>` : ""}
           ${detail.matched_ticket ? matchedTicketBlock(detail.matched_ticket) : ""}
+          ${reviewFeedbackBlock(ticket)}
           ${privacyBlock(detail.privacy_audit || [])}
         </div>
       `;
@@ -938,7 +1046,7 @@
         <div>${chip(ticket.category, "blue")}<div class="row-meta"><span>${html(ticket.assignment_group)}</span></div></div>
         <div>${chip(formatRoute(ticket.status), tone)}<div class="row-meta"><span>${html(formatRoute(ticket.route_path))}</span></div></div>
         <div>${confidence(ticket.confidence_score)}<div class="row-meta"><span>${pct(ticket.confidence_score)} confidence</span></div></div>
-        <div class="row-meta"><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(shortTime(ticket.created_at))}</span></div>
+        <div class="row-meta"><span>U${ticket.urgency}</span><span>I${ticket.impact}</span><span>${html(shortTime(ticket.created_at))}</span>${ticket.sla_risk_level ? riskChip(ticket.sla_risk_level) : ""}</div>
       </div>`;
     }
 
@@ -947,7 +1055,7 @@
         <div class="grid-4">
           ${metric("Route Path", formatRoute(routing.route_path), routing.semantic_cache_hit ? "LLM bypassed" : "agentic route")}
           ${metric("Confidence", pct(routing.confidence_score), "composite score")}
-          ${metric("Verifier", pct(routing.confidence_components.verifier_score), "grounding score")}
+          ${metric("SLA Risk", pct(routing.sla_risk?.score), routing.sla_risk?.level || "normal")}
           ${metric("Latency", `${routing.latency_ms} ms`, routing.model_name || "model")}
         </div>
         <div class="detail-module">
@@ -956,6 +1064,33 @@
           ${qualityRow("Retrieval similarity", routing.confidence_components.retrieval_similarity)}
           ${qualityRow("Verifier grounding", routing.confidence_components.verifier_score)}
           ${qualityRow("Privacy risk", routing.confidence_components.privacy_risk)}
+        </div>
+      `;
+    }
+
+    function operationalSignals(detail) {
+      const routing = detail.routing || {};
+      const resolver = routing.resolver_recommendation || {};
+      const gap = routing.knowledge_gap || {};
+      return `
+        <div class="grid-3">
+          <div class="detail-module">
+            <span class="kicker">Resolver Recommendation</span>
+            <h2>${html(resolver.group || "Unassigned")}</h2>
+            ${qualityRow("Resolver confidence", resolver.confidence || 0)}
+            <div class="row-meta"><span>${html(resolver.source || "not recorded")}</span><span>${html((resolver.alternates || []).join(", "))}</span></div>
+          </div>
+          <div class="detail-module">
+            <span class="kicker">Knowledge Coverage</span>
+            <div class="row-top"><h2>${gap.is_gap ? "Gap Detected" : "Covered"}</h2>${riskChip(gap.severity || "normal")}</div>
+            <div class="text-block">${html(gap.reason || "No coverage signal recorded")}</div>
+          </div>
+          <div class="detail-module">
+            <span class="kicker">Route Explainability</span>
+            ${(routing.route_explanation || []).map((item) => `
+              <div class="status-line"><span class="kicker">${html(item.label)}</span><div><strong>${html(item.value)}</strong><br>${html(item.impact)}</div></div>
+            `).join("") || `<div class="text-block">No route explanation was recorded for this decision.</div>`}
+          </div>
         </div>
       `;
     }
@@ -995,6 +1130,46 @@
         <table><thead><tr><th>Entity</th><th>Placeholder</th><th>Confidence</th><th>Policy</th></tr></thead>
         <tbody>${findings.map((item) => `<tr><td>${chip(item.entity_type, "red")}</td><td><span class="ticket-id">${html(item.placeholder)}</span></td><td>${pct(item.confidence)}</td><td>${html(item.policy_version)}</td></tr>`).join("")}</tbody></table>
       </div>`;
+    }
+
+    function reviewFeedbackBlock(ticket) {
+      if (!ticket?.ticket_id) return "";
+      return `<div class="detail-module">
+        <span class="kicker">Human Feedback Loop</span>
+        <div class="filter-grid">
+          <div><label for="reviewDecision">Decision</label><select id="reviewDecision"><option value="approved">Approved</option><option value="misrouted">Misrouted</option><option value="wrong_category">Wrong Category</option><option value="wrong_resolution">Wrong Resolution</option><option value="corrected">Corrected</option></select></div>
+          <div><label for="reviewerName">Reviewer</label><input id="reviewerName" placeholder="support engineer name"></div>
+          <div><label for="correctedCategory">Corrected Category</label><input id="correctedCategory" placeholder="optional"></div>
+          <div><label for="correctedGroup">Corrected Group</label><input id="correctedGroup" placeholder="optional"></div>
+        </div>
+        <div class="section-gap"><label for="correctedResolution">Corrected Resolution</label><textarea id="correctedResolution" placeholder="optional approved resolution or runbook note"></textarea></div>
+        <div class="section-gap"><label for="reviewNotes">Review Notes</label><textarea id="reviewNotes" placeholder="why the agent was right or wrong"></textarea></div>
+        <div class="actions section-gap"><button class="btn" onclick="submitReviewFeedback('${html(ticket.ticket_id)}')">Record Feedback</button><button class="btn secondary" onclick="navigate('intelligence')">Open Intelligence</button></div>
+      </div>`;
+    }
+
+    async function submitReviewFeedback(ticketId) {
+      const reviewer = $("reviewerName")?.value.trim();
+      if (!reviewer) return toast("Reviewer is required before recording feedback");
+      try {
+        const result = await api("/v1/review/escalations", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            decision: $("reviewDecision").value,
+            reviewer,
+            notes: $("reviewNotes").value.trim(),
+            corrected_category: $("correctedCategory").value.trim(),
+            corrected_assignment_group: $("correctedGroup").value.trim(),
+            corrected_resolution: $("correctedResolution").value.trim()
+          })
+        });
+        toast(`Feedback recorded: ${result.review_id}`);
+        if (state.current === "intelligence") refreshIntelligence();
+      } catch (error) {
+        toast(error.message);
+      }
     }
 
     function renderRoute() {
@@ -1168,6 +1343,11 @@
     function chip(text, tone = "") {
       return `<span class="chip ${tone}">${html(text || "Unassigned")}</span>`;
     }
+    function riskChip(level) {
+      const value = String(level || "normal");
+      const tone = value === "critical" ? "red" : value === "elevated" ? "amber" : value === "watch" ? "blue" : "green";
+      return chip(value, tone);
+    }
     function statusChip(status) {
       const tone = status === "human_review_required" ? "red" : status === "unrouted" ? "amber" : "green";
       return chip(formatRoute(status || "unknown"), tone);
@@ -1239,6 +1419,7 @@
     window.openTicketFromTable = openTicketFromTable;
     window.applySearchFilters = applySearchFilters;
     window.resetSearchFilters = resetSearchFilters;
+    window.submitReviewFeedback = submitReviewFeedback;
 
     initNav();
     navigate(state.current);
@@ -1248,6 +1429,7 @@
     setInterval(refreshHealth, 10000);
     setInterval(() => {
       if (state.current === "dashboard") refreshDashboard();
+      if (state.current === "intelligence") refreshIntelligence();
       if (state.current === "escalations") refreshEscalations();
       if (state.current === "audit") refreshAudit();
       if (state.current === "evaluation") refreshEvaluation();

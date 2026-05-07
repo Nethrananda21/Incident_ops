@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import json
 import time
+from collections import defaultdict
 from functools import lru_cache
 
 from fastapi import FastAPI, HTTPException, Query
@@ -347,6 +348,191 @@ def evaluation() -> dict:
     }
 
 
+@app.get("/v1/intelligence/routing")
+def routing_intelligence(limit: int = Query(default=500, ge=50, le=2000)) -> dict:
+    repo = get_repo()
+    settings = get_settings()
+    rows = repo.client.query(
+        """
+        WITH latest_tickets AS (
+            SELECT
+                ticket_id,
+                argMax(short_description, created_at) AS short_description,
+                argMax(category, created_at) AS category,
+                argMax(assignment_group, created_at) AS assignment_group,
+                argMax(urgency, created_at) AS urgency,
+                argMax(impact, created_at) AS impact,
+                argMax(source, created_at) AS source,
+                max(created_at) AS latest_created_at
+            FROM tickets
+            GROUP BY ticket_id
+        ),
+        latest_decisions AS (
+            SELECT
+                ticket_id,
+                argMax(assigned_category, created_at) AS assigned_category,
+                argMax(confidence_score, created_at) AS confidence_score,
+                argMax(classification_confidence, created_at) AS classification_confidence,
+                argMax(retrieval_similarity, created_at) AS retrieval_similarity,
+                argMax(verifier_score, created_at) AS verifier_score,
+                argMax(privacy_risk, created_at) AS privacy_risk,
+                argMax(escalation_required, created_at) AS escalation_required,
+                argMax(route_path, created_at) AS route_path,
+                argMax(semantic_cache_hit, created_at) AS semantic_cache_hit,
+                argMax(matched_ticket_id, created_at) AS matched_ticket_id,
+                argMax(model_name, created_at) AS model_name,
+                argMax(latency_ms, created_at) AS latency_ms,
+                argMax(sla_risk_score, created_at) AS sla_risk_score,
+                argMax(sla_risk_level, created_at) AS sla_risk_level,
+                argMax(resolver_group, created_at) AS resolver_group,
+                argMax(resolver_confidence, created_at) AS resolver_confidence,
+                argMax(knowledge_gap, created_at) AS knowledge_gap,
+                argMax(knowledge_gap_reason, created_at) AS knowledge_gap_reason,
+                max(created_at) AS latest_decision_at
+            FROM routing_decisions
+            GROUP BY ticket_id
+        )
+        SELECT
+            d.ticket_id,
+            ifNull(t.short_description, '') AS short_description,
+            ifNull(t.category, d.assigned_category) AS ticket_category,
+            ifNull(t.assignment_group, '') AS assignment_group,
+            ifNull(t.urgency, 3) AS urgency,
+            ifNull(t.impact, 3) AS impact,
+            ifNull(t.source, '') AS source,
+            d.assigned_category,
+            d.confidence_score,
+            d.classification_confidence,
+            d.retrieval_similarity,
+            d.verifier_score,
+            d.privacy_risk,
+            d.escalation_required,
+            d.route_path,
+            d.semantic_cache_hit,
+            d.matched_ticket_id,
+            d.model_name,
+            d.latency_ms,
+            d.sla_risk_score,
+            d.sla_risk_level,
+            if(d.resolver_group != '', d.resolver_group, ifNull(m.assignment_group, ifNull(t.assignment_group, ''))) AS resolver_group,
+            d.resolver_confidence,
+            d.knowledge_gap,
+            d.knowledge_gap_reason,
+            d.latest_decision_at
+        FROM latest_decisions AS d
+        LEFT JOIN latest_tickets AS t ON d.ticket_id = t.ticket_id
+        LEFT JOIN latest_tickets AS m ON d.matched_ticket_id = m.ticket_id
+        ORDER BY d.latest_decision_at DESC, d.ticket_id DESC
+        LIMIT %(limit)s
+        """,
+        parameters={"limit": limit},
+    ).result_rows
+    decisions = []
+    for row in rows:
+        risk_score = float(row[19])
+        if risk_score <= 0:
+            risk_score, risk_level_value = estimate_sla_risk(
+                urgency=int(row[4]),
+                impact=int(row[5]),
+                confidence=float(row[8]),
+                retrieval_similarity=float(row[10]),
+                verifier_score=float(row[11]),
+                privacy_risk=float(row[12]),
+                escalation_required=bool(row[13]),
+                rag_threshold=settings.rag_similarity_threshold,
+            )
+        else:
+            risk_level_value = row[20] or risk_level(risk_score)
+        knowledge_gap = bool(row[23]) or float(row[10]) < settings.rag_similarity_threshold or float(row[11]) < 0.70
+        knowledge_reason = row[24] or (
+            "retrieval or verifier score is below production threshold"
+            if knowledge_gap
+            else "approved context and verifier signal are sufficient"
+        )
+        resolver_confidence = float(row[22])
+        if resolver_confidence <= 0 and row[21] and row[21] != row[3]:
+            resolver_confidence = max(0.0, min(1.0, float(row[10])))
+        decisions.append(
+            {
+                "ticket_id": row[0],
+                "short_description": row[1],
+                "ticket_category": row[2],
+                "assignment_group": row[3],
+                "urgency": int(row[4]),
+                "impact": int(row[5]),
+                "source": row[6],
+                "assigned_category": row[7],
+                "confidence_score": float(row[8]),
+                "classification_confidence": float(row[9]),
+                "retrieval_similarity": float(row[10]),
+                "verifier_score": float(row[11]),
+                "privacy_risk": float(row[12]),
+                "escalation_required": bool(row[13]),
+                "route_path": row[14],
+                "semantic_cache_hit": bool(row[15]),
+                "matched_ticket_id": row[16] or None,
+                "model_name": row[17],
+                "latency_ms": int(row[18]),
+                "sla_risk_score": risk_score,
+                "sla_risk_level": risk_level_value,
+                "resolver_group": row[21] or row[3] or "Unassigned",
+                "resolver_confidence": resolver_confidence,
+                "knowledge_gap": knowledge_gap,
+                "knowledge_gap_reason": knowledge_reason,
+                "created_at": str(row[25]),
+            }
+        )
+
+    route_quality = aggregate_route_quality(decisions)
+    sla_queue = sorted(decisions, key=lambda item: item["sla_risk_score"], reverse=True)[:15]
+    knowledge_gaps = aggregate_knowledge_gaps(decisions)
+    resolver_capacity = aggregate_resolver_capacity(decisions)
+    feedback = review_feedback(repo)
+    privacy_total = int(repo.client.command("SELECT count() FROM privacy_audit"))
+    return {
+        "summary": {
+            "decisions_analyzed": len(decisions),
+            "auto_resolution_rate": safe_ratio(
+                sum(1 for item in decisions if not item["escalation_required"]),
+                len(decisions),
+            ),
+            "semantic_cache_rate": safe_ratio(
+                sum(1 for item in decisions if item["semantic_cache_hit"]),
+                len(decisions),
+            ),
+            "human_review_rate": safe_ratio(
+                sum(1 for item in decisions if item["escalation_required"]),
+                len(decisions),
+            ),
+            "knowledge_gap_count": sum(1 for item in decisions if item["knowledge_gap"]),
+            "critical_sla_count": sum(1 for item in decisions if item["sla_risk_level"] == "critical"),
+            "avg_sla_risk": round(avg(decisions, "sla_risk_score"), 4),
+            "avg_confidence": round(avg(decisions, "confidence_score"), 4),
+        },
+        "route_quality": route_quality,
+        "sla_risk_queue": sla_queue,
+        "knowledge_gaps": knowledge_gaps,
+        "resolver_capacity": resolver_capacity,
+        "feedback": feedback,
+        "governance": {
+            "model_name": settings.nvidia_llm_model,
+            "privacy_findings": privacy_total,
+            "thresholds": {
+                "fast_path_similarity": settings.fast_path_similarity_threshold,
+                "rag_similarity": settings.rag_similarity_threshold,
+                "confidence": settings.routing_confidence_threshold,
+                "verifier": 0.70,
+            },
+            "controls": [
+                "privacy redaction before retrieval and model calls",
+                "semantic cache bypass for approved near-duplicate incidents",
+                "OOD escalation before generation when retrieval is weak",
+                "immutable human-review feedback events",
+            ],
+        },
+    }
+
+
 @app.get("/v1/tickets/search")
 def search_tickets(
     q: str = "",
@@ -432,6 +618,12 @@ def search_tickets(
                 argMax(semantic_cache_hit, created_at) AS semantic_cache_hit,
                 argMax(matched_ticket_id, created_at) AS matched_ticket_id,
                 argMax(latency_ms, created_at) AS latency_ms,
+                argMax(sla_risk_score, created_at) AS sla_risk_score,
+                argMax(sla_risk_level, created_at) AS sla_risk_level,
+                argMax(resolver_group, created_at) AS resolver_group,
+                argMax(resolver_confidence, created_at) AS resolver_confidence,
+                argMax(knowledge_gap, created_at) AS knowledge_gap,
+                argMax(knowledge_gap_reason, created_at) AS knowledge_gap_reason,
                 max(created_at) AS latest_routed_at
             FROM routing_decisions
             GROUP BY ticket_id
@@ -454,7 +646,13 @@ def search_tickets(
             ifNull(d.escalation_required, 0) AS escalation_required,
             ifNull(d.semantic_cache_hit, 0) AS semantic_cache_hit,
             ifNull(d.matched_ticket_id, '') AS matched_ticket_id,
-            ifNull(d.latency_ms, 0) AS latency_ms
+            ifNull(d.latency_ms, 0) AS latency_ms,
+            ifNull(d.sla_risk_score, 0) AS sla_risk_score,
+            ifNull(d.sla_risk_level, '') AS sla_risk_level,
+            ifNull(d.resolver_group, '') AS resolver_group,
+            ifNull(d.resolver_confidence, 0) AS resolver_confidence,
+            ifNull(d.knowledge_gap, 0) AS knowledge_gap,
+            ifNull(d.knowledge_gap_reason, '') AS knowledge_gap_reason
         FROM latest_tickets AS t
         LEFT JOIN latest_decisions AS d ON t.ticket_id = d.ticket_id
         WHERE {' AND '.join(clauses)}
@@ -510,6 +708,12 @@ def search_tickets(
                 "semantic_cache_hit": bool(row[15]),
                 "matched_ticket_id": row[16] or None,
                 "latency_ms": int(row[17]),
+                "sla_risk_score": float(row[18]),
+                "sla_risk_level": row[19] or None,
+                "resolver_group": row[20] or None,
+                "resolver_confidence": float(row[21]),
+                "knowledge_gap": bool(row[22]),
+                "knowledge_gap_reason": row[23] or None,
             }
             for row in rows
         ],
@@ -539,7 +743,9 @@ def ticket_detail(ticket_id: str) -> dict:
         SELECT ticket_id, assigned_category, suggested_resolution, confidence_score,
                classification_confidence, retrieval_similarity, verifier_score, privacy_risk,
                escalation_required, route_path, semantic_cache_hit, matched_ticket_id,
-               model_name, latency_ms, created_at
+               model_name, latency_ms, sla_risk_score, sla_risk_level, resolver_group,
+               resolver_confidence, knowledge_gap, knowledge_gap_reason, route_explanation,
+               created_at
         FROM routing_decisions
         WHERE ticket_id = %(ticket_id)s
         ORDER BY created_at DESC
@@ -594,23 +800,51 @@ def ticket_detail(ticket_id: str) -> dict:
         else:
             status = "resolved"
 
-    return {
-        "ticket": {
-            "ticket_id": ticket[0],
-            "number": ticket[1],
-            "short_description": ticket[2],
-            "description": ticket[3],
-            "sanitized_text": ticket[4],
-            "category": ticket[5],
-            "assignment_group": ticket[6],
-            "stored_resolution": ticket[7],
-            "urgency": int(ticket[8]),
-            "impact": int(ticket[9]),
-            "source": ticket[10],
-            "created_at": str(ticket[11]),
-        },
-        "status": status,
-        "routing": None if not decision else {
+    routing_payload = None
+    if decision:
+        settings = get_settings()
+        sla_score = float(decision[14])
+        sla_level_value = decision[15] or risk_level(sla_score)
+        if sla_score <= 0:
+            sla_score, sla_level_value = estimate_sla_risk(
+                urgency=int(ticket[8]),
+                impact=int(ticket[9]),
+                confidence=float(decision[3]),
+                retrieval_similarity=float(decision[5]),
+                verifier_score=float(decision[6]),
+                privacy_risk=float(decision[7]),
+                escalation_required=bool(decision[8]),
+                rag_threshold=settings.rag_similarity_threshold,
+            )
+        knowledge_gap = (
+            bool(decision[18])
+            or float(decision[5]) < settings.rag_similarity_threshold
+            or (decision[9] == "generative_rag" and float(decision[6]) < 0.70)
+        )
+        knowledge_reason = decision[19] or (
+            "retrieval or verifier score is below production threshold"
+            if knowledge_gap
+            else "approved context and verifier signal are sufficient"
+        )
+        resolver_group = decision[16] or (matched_ticket or {}).get("assignment_group") or ticket[6] or "Unassigned"
+        resolver_confidence = float(decision[17]) if float(decision[17]) > 0 else (float(decision[5]) if matched_ticket else 0.0)
+        route_explanation = parse_json_list(decision[20])
+        if not route_explanation:
+            route_explanation = build_route_explanation(
+                redactions=len(audit_rows),
+                matched_ticket_id=decision[11] or None,
+                retrieval_similarity=float(decision[5]),
+                route_path=decision[9],
+                semantic_cache_hit=bool(decision[10]),
+                escalation_required=bool(decision[8]),
+                resolver_group=resolver_group,
+                resolver_confidence=resolver_confidence,
+                sla_risk_score=sla_score,
+                sla_risk_level=sla_level_value,
+                knowledge_gap=knowledge_gap,
+                knowledge_reason=knowledge_reason,
+            )
+        routing_payload = {
             "ticket_id": decision[0],
             "assigned_category": decision[1],
             "suggested_resolution": split_resolution(decision[2]),
@@ -627,8 +861,42 @@ def ticket_detail(ticket_id: str) -> dict:
             "matched_ticket_id": decision[11] or None,
             "model_name": decision[12],
             "latency_ms": int(decision[13]),
-            "created_at": str(decision[14]),
+            "sla_risk": {
+                "score": sla_score,
+                "level": sla_level_value or "normal",
+            },
+            "resolver_recommendation": {
+                "group": resolver_group,
+                "confidence": resolver_confidence,
+                "source": "stored_decision" if decision[16] else "detail_fallback",
+                "alternates": [],
+            },
+            "knowledge_gap": {
+                "is_gap": knowledge_gap,
+                "reason": knowledge_reason,
+                "severity": risk_level(sla_score) if knowledge_gap else "normal",
+            },
+            "route_explanation": route_explanation,
+            "created_at": str(decision[21]),
+        }
+
+    return {
+        "ticket": {
+            "ticket_id": ticket[0],
+            "number": ticket[1],
+            "short_description": ticket[2],
+            "description": ticket[3],
+            "sanitized_text": ticket[4],
+            "category": ticket[5],
+            "assignment_group": ticket[6],
+            "stored_resolution": ticket[7],
+            "urgency": int(ticket[8]),
+            "impact": int(ticket[9]),
+            "source": ticket[10],
+            "created_at": str(ticket[11]),
         },
+        "status": status,
+        "routing": routing_payload,
         "matched_ticket": matched_ticket,
         "privacy_audit": [
             {
@@ -705,12 +973,283 @@ def privacy_audit(stream_id: str) -> dict:
 
 @app.post("/v1/review/escalations")
 def review_escalation(decision: ReviewDecision) -> dict:
+    normalized = decision.decision.strip().lower().replace(" ", "_")
+    if normalized not in {
+        "accept",
+        "accepted",
+        "approve",
+        "approved",
+        "reject",
+        "rejected",
+        "edit",
+        "edited",
+        "corrected",
+        "misrouted",
+        "wrong_category",
+        "wrong_resolution",
+    }:
+        raise HTTPException(status_code=400, detail="unsupported review decision")
+    payload = decision.model_dump()
+    payload["decision"] = normalized
+    review_id = get_repo().insert_review_event(payload)
     return {
-        "status": "accepted",
+        "status": "recorded",
+        "review_id": review_id,
         "ticket_id": decision.ticket_id,
-        "decision": decision.decision,
+        "decision": normalized,
         "reviewer": decision.reviewer,
     }
+
+
+@app.get("/v1/review/events")
+def review_events(limit: int = Query(default=50, ge=1, le=200)) -> dict:
+    return review_feedback(get_repo(), limit=limit)
+
+
+def safe_ratio(numerator: int | float, denominator: int | float) -> float:
+    if not denominator:
+        return 0.0
+    return round(float(numerator) / float(denominator), 4)
+
+
+def avg(items: list[dict], key: str) -> float:
+    if not items:
+        return 0.0
+    return sum(float(item.get(key, 0.0) or 0.0) for item in items) / len(items)
+
+
+def risk_level(score: float) -> str:
+    if score >= 0.75:
+        return "critical"
+    if score >= 0.55:
+        return "elevated"
+    if score >= 0.35:
+        return "watch"
+    return "normal"
+
+
+def estimate_sla_risk(
+    *,
+    urgency: int,
+    impact: int,
+    confidence: float,
+    retrieval_similarity: float,
+    verifier_score: float,
+    privacy_risk: float,
+    escalation_required: bool,
+    rag_threshold: float,
+) -> tuple[float, str]:
+    priority_risk = ((4 - urgency) + (4 - impact)) / 6
+    uncertainty = 1.0 - max(0.0, min(1.0, confidence))
+    retrieval_gap = max(0.0, rag_threshold - retrieval_similarity) / max(rag_threshold, 0.01)
+    verifier_gap = max(0.0, 0.70 - verifier_score) / 0.70
+    score = (
+        0.45 * priority_risk
+        + 0.25 * uncertainty
+        + 0.15 * retrieval_gap
+        + 0.10 * verifier_gap
+        + 0.05 * privacy_risk
+        + (0.15 if escalation_required else 0.0)
+    )
+    score = round(max(0.0, min(1.0, score)), 4)
+    return score, risk_level(score)
+
+
+def aggregate_route_quality(decisions: list[dict]) -> list[dict]:
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in decisions:
+        groups[item["route_path"]].append(item)
+    rows = []
+    for route_path, items in groups.items():
+        rows.append(
+            {
+                "route_path": route_path,
+                "count": len(items),
+                "avg_confidence": round(avg(items, "confidence_score"), 4),
+                "avg_retrieval_similarity": round(avg(items, "retrieval_similarity"), 4),
+                "avg_verifier_score": round(avg(items, "verifier_score"), 4),
+                "avg_latency_ms": round(avg(items, "latency_ms"), 1),
+                "escalation_rate": safe_ratio(sum(1 for item in items if item["escalation_required"]), len(items)),
+                "semantic_cache_rate": safe_ratio(sum(1 for item in items if item["semantic_cache_hit"]), len(items)),
+            }
+        )
+    return sorted(rows, key=lambda item: item["count"], reverse=True)
+
+
+def aggregate_knowledge_gaps(decisions: list[dict]) -> list[dict]:
+    groups: dict[tuple[str, str], list[dict]] = defaultdict(list)
+    for item in decisions:
+        if item["knowledge_gap"]:
+            groups[(item["assigned_category"], item["knowledge_gap_reason"])].append(item)
+    clusters = []
+    for (category, reason), items in groups.items():
+        examples = sorted(items, key=lambda item: item["sla_risk_score"], reverse=True)[:3]
+        max_risk = max((item["sla_risk_score"] for item in items), default=0.0)
+        clusters.append(
+            {
+                "category": category,
+                "reason": reason,
+                "severity": risk_level(max_risk),
+                "count": len(items),
+                "avg_retrieval_similarity": round(avg(items, "retrieval_similarity"), 4),
+                "avg_verifier_score": round(avg(items, "verifier_score"), 4),
+                "recommended_action": "create or refresh a runbook for this category and review similar escalations",
+                "examples": [
+                    {
+                        "ticket_id": item["ticket_id"],
+                        "short_description": item["short_description"],
+                        "sla_risk_score": item["sla_risk_score"],
+                        "confidence_score": item["confidence_score"],
+                    }
+                    for item in examples
+                ],
+            }
+        )
+    return sorted(clusters, key=lambda item: (item["count"], item["severity"]), reverse=True)[:12]
+
+
+def aggregate_resolver_capacity(decisions: list[dict]) -> list[dict]:
+    groups: dict[str, list[dict]] = defaultdict(list)
+    for item in decisions:
+        groups[item["resolver_group"] or item["assignment_group"] or "Unassigned"].append(item)
+    max_workload = max((len(items) for items in groups.values()), default=1)
+    rows = []
+    for group, items in groups.items():
+        escalations = sum(1 for item in items if item["escalation_required"])
+        critical = sum(1 for item in items if item["sla_risk_level"] == "critical")
+        load_index = min(
+            1.0,
+            0.55 * (len(items) / max_workload)
+            + 0.25 * safe_ratio(escalations, len(items))
+            + 0.20 * (1.0 - avg(items, "confidence_score")),
+        )
+        if load_index >= 0.75:
+            recommendation = "saturated"
+        elif load_index >= 0.50:
+            recommendation = "constrained"
+        else:
+            recommendation = "available"
+        rows.append(
+            {
+                "group": group,
+                "workload": len(items),
+                "open_escalations": escalations,
+                "critical_sla": critical,
+                "avg_confidence": round(avg(items, "confidence_score"), 4),
+                "load_index": round(load_index, 4),
+                "recommendation": recommendation,
+            }
+        )
+    return sorted(rows, key=lambda item: item["load_index"], reverse=True)
+
+
+def review_feedback(repo: ClickHouseRepository, limit: int = 30) -> dict:
+    counts = repo.client.query(
+        """
+        SELECT decision, count() AS c
+        FROM review_events
+        GROUP BY decision
+        ORDER BY c DESC, decision ASC
+        """
+    ).result_rows
+    recent = repo.client.query(
+        """
+        SELECT review_id, ticket_id, decision, reviewer, notes, corrected_category,
+               corrected_assignment_group, corrected_resolution, created_at
+        FROM review_events
+        ORDER BY created_at DESC
+        LIMIT %(limit)s
+        """,
+        parameters={"limit": limit},
+    ).result_rows
+    total = sum(int(row[1]) for row in counts)
+    correction_total = sum(
+        int(row[1])
+        for row in counts
+        if row[0] in {"corrected", "misrouted", "wrong_category", "wrong_resolution", "edit", "edited"}
+    )
+    return {
+        "total_events": total,
+        "correction_rate": safe_ratio(correction_total, total),
+        "by_decision": [{"decision": row[0], "count": int(row[1])} for row in counts],
+        "recent": [
+            {
+                "review_id": row[0],
+                "ticket_id": row[1],
+                "decision": row[2],
+                "reviewer": row[3],
+                "notes": row[4],
+                "corrected_category": row[5] or None,
+                "corrected_assignment_group": row[6] or None,
+                "corrected_resolution": row[7] or None,
+                "created_at": str(row[8]),
+            }
+            for row in recent
+        ],
+    }
+
+
+def parse_json_list(value: str) -> list[dict]:
+    try:
+        parsed = json.loads(value or "[]")
+        return parsed if isinstance(parsed, list) else []
+    except json.JSONDecodeError:
+        return []
+
+
+def build_route_explanation(
+    *,
+    redactions: int,
+    matched_ticket_id: str | None,
+    retrieval_similarity: float,
+    route_path: str,
+    semantic_cache_hit: bool,
+    escalation_required: bool,
+    resolver_group: str,
+    resolver_confidence: float,
+    sla_risk_score: float,
+    sla_risk_level: str,
+    knowledge_gap: bool,
+    knowledge_reason: str,
+) -> list[dict[str, str]]:
+    if semantic_cache_hit:
+        route_impact = "approved historical resolution returned without invoking the LLM"
+    elif escalation_required:
+        route_impact = "confidence or policy gates require human review before remediation"
+    else:
+        route_impact = "retrieved context was sent through generation and verifier gates"
+    return [
+        {
+            "label": "Privacy gate",
+            "value": f"{redactions} redactions",
+            "impact": "only sanitized text is available to retrieval and model calls",
+        },
+        {
+            "label": "Nearest approved ticket",
+            "value": f"{matched_ticket_id or 'none'} at {retrieval_similarity:.2f}",
+            "impact": "similarity determines fast path, generative RAG, or OOD escalation",
+        },
+        {
+            "label": "Route branch",
+            "value": route_path,
+            "impact": route_impact,
+        },
+        {
+            "label": "Resolver recommendation",
+            "value": f"{resolver_group} at {resolver_confidence:.2f}",
+            "impact": "derived from stored decision metadata or matched-ticket fallback",
+        },
+        {
+            "label": "SLA risk",
+            "value": f"{sla_risk_level} at {sla_risk_score:.2f}",
+            "impact": "priority, confidence, retrieval gap, verifier gap, and privacy risk combined",
+        },
+        {
+            "label": "Knowledge coverage",
+            "value": "gap detected" if knowledge_gap else "covered",
+            "impact": knowledge_reason,
+        },
+    ]
 
 
 def ticket_from_row(row) -> dict:

@@ -16,6 +16,8 @@ The system directly implements the requested capabilities:
 - **Retrieves similar past tickets** from ClickHouse as the RAG knowledge base.
 - **Uses an agentic workflow** through LangGraph nodes for privacy, retrieval, triage, generation, verification, and escalation.
 - **Bypasses the LLM for repetitive known incidents** through deterministic semantic caching.
+- **Explains every routing decision** with matched-ticket evidence, route branch, resolver recommendation, SLA risk, and knowledge coverage.
+- **Detects operational gaps** such as missing runbooks, high SLA risk, resolver saturation, and reviewer correction trends.
 - **Protects privacy** by redacting sensitive values before AI exposure.
 
 ## Architecture
@@ -40,9 +42,10 @@ ClickHouse
         |
         v
 Python FastAPI + LangGraph Agent
-- triage
 - ClickHouse vector retrieval
+- operational assessment
 - semantic cache fast path
+- triage
 - NVIDIA LLM generation
 - verifier
 - escalation
@@ -72,7 +75,9 @@ The frontend is available at:
 Pages:
 
 - **Dashboard**: live ticket totals, routing decisions, privacy findings, category load, assignment groups, and recent tickets.
+- **Intelligence**: routing quality, SLA risk queue, knowledge-gap clusters, resolver capacity, human feedback loop, and governance controls.
 - **Ticket Stream**: server-sent event feed of live backend tickets from ClickHouse.
+- **Search**: full ticket search with category, source, status, route, urgency, and impact filters; rows open full ticket details.
 - **Routing Desk**: submit or stage a ticket, run classification/RAG/resolution/verification, and inspect the agent decision.
 - **Escalations**: human-review queue for uncertain routing decisions.
 - **Privacy Audit**: recent redaction findings with entity type, placeholder, confidence, policy, and detector version.
@@ -118,23 +123,28 @@ The Python agent uses LangGraph with these nodes:
    - Retrieves similar sanitized tickets from ClickHouse using native cosine similarity.
    - Excludes unreviewed `Pending Review` API submissions from routing thresholds so repeated bad inputs cannot poison retrieval.
 
-3. **Fast-Path Node**
+3. **Assessment Node**
+   - Runs before the expensive LLM path.
+   - Computes knowledge-gap signals, resolver recommendation, SLA risk, and route explanation metadata.
+   - Lets LangGraph branch early into semantic cache, policy escalation, OOD escalation, or generative RAG.
+
+4. **Fast-Path Node**
    - Runs when the nearest approved historical ticket has similarity greater than or equal to `FAST_PATH_SIMILARITY_THRESHOLD`.
    - Bypasses the NVIDIA LLM and verifier model call.
    - Returns the matched ticket's approved resolution verbatim as a semantic cache hit.
 
-4. **Triage Node**
+5. **Triage Node**
    - Assigns category using retrieved historical incidents and keyword fallback.
 
-5. **Generation Node**
+6. **Generation Node**
    - Uses the configured NVIDIA-hosted LLM to draft resolution steps.
    - Falls back to grounded RAG-derived resolution steps if the model call times out or fails.
 
-6. **Verifier Node**
+7. **Verifier Node**
    - Uses the LLM to judge grounding and completeness.
    - Falls back to heuristic scoring when model latency or errors would block the workflow.
 
-7. **Escalation Node**
+8. **Escalation Node**
    - Escalates tickets when confidence is below threshold, retrieval similarity is weak, or verifier score is low.
 
 ## Semantic Caching and Fast-Path Routing
@@ -148,6 +158,18 @@ The routing agent uses strict similarity thresholds before deciding whether to s
 | Out-of-distribution path | `< 0.70` | Halt AI generation and route to human escalation |
 
 This keeps common Tier-1 tickets deterministic, cheap, and fast while still allowing the agentic workflow to handle nuanced incidents. In local Docker verification, a warmed semantic cache route matched `INC00491`, bypassed the LLM, and completed in tens of milliseconds; the first route after API startup is slower because the local embedding model has to warm up.
+
+## Routing Intelligence
+
+The current build includes a production-shaped intelligence layer on top of the routing engine:
+
+- **SLA risk scoring** combines urgency, impact, confidence, retrieval gap, verifier gap, and privacy risk.
+- **Resolver recommendation** derives the most likely owner group from retrieval consensus and fallback rules.
+- **Knowledge-gap detection** flags weak coverage when retrieval or verifier signals suggest missing runbooks.
+- **Route explainability** stores the privacy gate, nearest approved ticket, route branch, resolver signal, SLA risk, and knowledge coverage for every decision.
+- **Human feedback persistence** writes reviewer corrections into ClickHouse as immutable `review_events` for later analytics and active-learning workflows.
+
+The **Intelligence** page surfaces these signals live from the backend with no hardcoded UI data.
 
 ## Confidence Scoring
 
@@ -236,6 +258,9 @@ Important routes:
 | `GET` | `/v1/dashboard` | Live dashboard metrics |
 | `GET` | `/v1/tickets/recent` | Recent backend tickets |
 | `GET` | `/v1/tickets/stream` | SSE ticket stream |
+| `GET` | `/v1/tickets/search` | Search tickets with advanced filters |
+| `GET` | `/v1/tickets/detail/{ticket_id}` | Full ticket detail, resolution status, matched ticket, and privacy audit |
+| `GET` | `/v1/intelligence/routing` | Route quality, SLA risk, knowledge gaps, resolver capacity, feedback, and governance |
 | `POST` | `/v1/tickets/route` | Run the LangGraph routing workflow |
 | `GET` | `/v1/tickets/status/{ticket_id}` | Latest routing decision for a ticket |
 | `GET` | `/v1/escalations` | Human-review queue |
@@ -243,7 +268,8 @@ Important routes:
 | `GET` | `/v1/privacy/audit/{stream_id}` | Audit trail for one stream |
 | `GET` | `/v1/knowledge` | Sanitized RAG corpus |
 | `GET` | `/v1/evaluation` | Live evaluation metrics |
-| `POST` | `/v1/review/escalations` | Submit reviewer decision |
+| `POST` | `/v1/review/escalations` | Persist reviewer decision, correction, or override feedback |
+| `GET` | `/v1/review/events` | Review feedback history and correction-rate metrics |
 
 Routing responses include the deterministic routing branch:
 
@@ -252,7 +278,13 @@ Routing responses include the deterministic routing branch:
   "route_path": "semantic_cache | generative_rag | out_of_distribution",
   "semantic_cache_hit": true,
   "matched_ticket_id": "INC00491",
-  "routing_latency_ms": 56
+  "routing_latency_ms": 56,
+  "sla_risk": { "score": 0.15, "level": "normal" },
+  "knowledge_gap": { "is_gap": false, "reason": "approved historical context is sufficient for this route" },
+  "resolver_recommendation": { "group": "IT Support", "confidence": 1.0, "source": "retrieval_consensus" },
+  "route_explanation": [
+    { "label": "Nearest approved ticket", "value": "INC00491 at 1.00", "impact": "semantic cache branch selected" }
+  ]
 }
 ```
 
@@ -433,7 +465,8 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 5. Route it and explain the agent nodes: privacy, retrieval, triage, generation, verifier, escalation.
 6. Open **Privacy Audit** to show redaction evidence.
 7. Open **Knowledge Base** to show sanitized historical incidents used for RAG.
-8. Open **Evaluation** to show measurable confidence/retrieval/escalation signals.
+8. Open **Intelligence** to show SLA risk, route-quality trends, resolver saturation, knowledge gaps, and feedback-loop governance.
+9. Open **Evaluation** to show measurable confidence/retrieval/escalation signals.
 
 ## Current Limitations
 
@@ -441,13 +474,15 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 - Semantic embeddings use `sentence-transformers/all-MiniLM-L6-v2` locally on CPU. For production scale, run embeddings as a separate model service.
 - ClickHouse performs native cosine-similarity retrieval, but the MVP does not yet define a production HNSW/IVF vector index.
 - Hosted LLM latency can vary, so the system uses timeout-based fallback and escalation.
-- Human review persistence is stubbed as an accepted response; a production version should store reviewer decisions.
+- Reviewer feedback is persisted, but the MVP does not yet retrain or re-index from reviewer corrections automatically.
+- Resolver capacity is inferred from live routing behavior; it is not yet integrated with real workforce-management or on-call systems.
+- SLA risk is an explainable composite heuristic today, not a historically calibrated incident-severity model.
 
 ## Production Roadmap
 
 - Move the local semantic embedding model into a dedicated embedding service.
 - Add ClickHouse HNSW vector index queries.
-- Persist reviewer decisions and override labels.
+- Add active-learning jobs that convert reviewer corrections into approved training labels and updated KB entries.
 - Add OpenTelemetry traces across Go, Redpanda, ClickHouse, and Python.
 - Add authentication, RBAC, and tenant isolation.
 - Add ServiceNow/Jira/Zendesk connectors.

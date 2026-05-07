@@ -21,6 +21,30 @@ class ConfidenceComponents(BaseModel):
     privacy_risk: float
 
 
+class RouteEvidence(BaseModel):
+    label: str
+    value: str
+    impact: str
+
+
+class KnowledgeGapSignal(BaseModel):
+    is_gap: bool
+    reason: str
+    severity: str
+
+
+class ResolverRecommendation(BaseModel):
+    group: str
+    confidence: float
+    source: str
+    alternates: list[str] = []
+
+
+class SlaRisk(BaseModel):
+    score: float
+    level: str
+
+
 class RouteResponse(BaseModel):
     ticket_id: str
     assigned_category: str
@@ -35,6 +59,10 @@ class RouteResponse(BaseModel):
     route_path: str
     semantic_cache_hit: bool
     matched_ticket_id: str | None = None
+    sla_risk: SlaRisk
+    knowledge_gap: KnowledgeGapSignal
+    resolver_recommendation: ResolverRecommendation
+    route_explanation: list[RouteEvidence]
 
 
 class ReviewDecision(BaseModel):
@@ -43,4 +71,5 @@ class ReviewDecision(BaseModel):
     reviewer: str
     notes: str | None = None
     corrected_category: str | None = None
+    corrected_assignment_group: str | None = None
     corrected_resolution: str | None = None
