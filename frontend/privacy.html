@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // PRIVACY AUDIT</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.analytics-row { display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;background:var(--border);margin-bottom:1px; }
+.analytics-row>.card { border:none;border-right:1px solid var(--border); }
+.analytics-row>.card:last-child { border-right:none; }
+.entity-bar { display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px; }
+.entity-bar .bar-track { flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden; }
+.entity-bar .bar-fill  { height:100%;border-radius:2px;transition:width .6s ease; }
+.log-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Privacy Audit // Redaction Governance</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item active" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Privacy Audit // Redaction Governance</h1>
+    <p><span style="font-family:var(--mono);color:var(--accent)">GET /v1/privacy/audit/recent</span></p>
+  </div>
+  <div id="priv-error"></div>
+
+  <!-- KPI row -->
+  <div class="kpi-grid mb-1" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kpi-card"><div class="kpi-label">TOTAL FINDINGS</div><div class="kpi-value" id="pk-total">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">HIGH CONF (&gt;0.9)</div><div class="kpi-value" id="pk-high">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">ENTITY TYPES</div><div class="kpi-value" id="pk-types">—</div></div>
+    <div class="kpi-card"><div class="kpi-label">POLICY VERSION</div><div class="kpi-value" id="pk-policy" style="font-size:20px">—</div></div>
+  </div>
+
+  <!-- Analytics row -->
+  <div class="analytics-row mb-1">
+    <!-- Entity distribution -->
+    <div class="card">
+      <div class="card-title">ENTITY DISTRIBUTION</div>
+      <div id="entity-dist"></div>
+    </div>
+    <!-- Detector versions -->
+    <div class="card">
+      <div class="card-title">DETECTOR VERSIONS</div>
+      <div id="detector-versions"></div>
+    </div>
+    <!-- Policy versions -->
+    <div class="card">
+      <div class="card-title">POLICY VERSIONS</div>
+      <div id="policy-versions"></div>
+    </div>
+    <!-- Top findings -->
+    <div class="card">
+      <div class="card-title">TOP PLACEHOLDERS</div>
+      <div id="top-placeholders"></div>
+    </div>
+  </div>
+
+  <!-- Full-width findings table -->
+  <div class="card" style="padding:0">
+    <div class="log-header">
+      <div class="card-title" style="margin:0">REDACTION LOG <span class="sub" id="log-count">// 0</span></div>
+      <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+        <select id="pf-type" onchange="applyPrivFilter()" style="width:140px">
+          <option value="">All Entity Types</option>
+        </select>
+        <div style="display:flex;align-items:center;gap:6px;font-family:var(--mono);font-size:10px;color:var(--text2)">
+          min conf
+          <input type="range" id="pf-conf" min="0" max="1" step="0.05" value="0"
+            style="width:90px;padding:0;border:none;background:transparent;accent-color:var(--accent)"
+            oninput="document.getElementById('pf-conf-val').textContent=parseFloat(this.value).toFixed(2);applyPrivFilter()">
+          <span id="pf-conf-val">0.00</span>
+        </div>
+        <button class="btn btn-ghost" onclick="exportCsv()">↓ CSV</button>
+      </div>
+    </div>
+    <div style="overflow-y:auto;max-height:calc(100vh - 420px)">
+      <table class="data-table">
+        <thead><tr>
+          <th>TICKET ID</th><th>STREAM ID</th><th>ENTITY TYPE</th>
+          <th>PLACEHOLDER</th><th>CONFIDENCE</th>
+          <th>POLICY</th><th>DETECTOR</th><th>CREATED</th>
+        </tr></thead>
+        <tbody id="priv-tbody"><tr><td colspan="8"><div id="priv-skel"></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+</main>
+
+<!-- Ticket detail modal (shared) -->
+<div class="modal-overlay" id="ticket-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-ticket-id"></div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+
+<!-- Stream / Privacy finding detail modal -->
+<div class="modal-overlay" id="stream-modal">
+  <div class="modal-box"><div class="modal-header">
+    <div class="modal-title" id="stream-modal-title">PRIVACY FINDING //</div>
+    <button class="modal-close" onclick="document.getElementById('stream-modal').classList.remove('open')">✕</button>
+  </div><div id="stream-modal-content"></div></div>
+</div>
+
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+const ENTITY_COLORS = {
+  PERSON:'#5b8fff', EMAIL:'#bf6fff', ORG:'#33cc77',
+  PHONE:'#ff8c42', IP_ADDRESS:'#ff4d4d', CREDIT_CARD:'#00d4e0',
+  SSN:'#ffd23f', DATE_TIME:'#a0a0c0'
+};
+let allFindings = [];
+
+async function loadPrivacy() {
+  showSkeleton('priv-skel', 8);
+  try {
+    const d = await apiFetch('/v1/privacy/audit/recent');
+    allFindings = Array.isArray(d) ? d : (d.findings || []);
+
+    // KPIs
+    document.getElementById('pk-total').textContent = allFindings.length;
+    document.getElementById('pk-high').textContent  = allFindings.filter(f=>f.confidence>0.9).length;
+    const types = [...new Set(allFindings.map(f=>f.entity_type).filter(Boolean))];
+    document.getElementById('pk-types').textContent  = types.length;
+    const pv = allFindings[0]?.policy_version;
+    document.getElementById('pk-policy').textContent = pv || (d.policy_version || '—');
+
+    // Populate entity type filter
+    const pft = document.getElementById('pf-type');
+    pft.innerHTML = '<option value="">All Entity Types</option>' + types.sort().map(t=>`<option>${t}</option>`).join('');
+
+    renderAnalytics(allFindings);
+    applyPrivFilter();
+  } catch(e) {
+    showError('priv-error', e.message, e.status);
+    clearContainer('priv-skel');
+  }
+}
+
+function renderAnalytics(data) {
+  // Entity distribution
+  const dist = {};
+  data.forEach(f=>{ if(f.entity_type) dist[f.entity_type]=(dist[f.entity_type]||0)+1; });
+  const sortedDist = Object.entries(dist).sort((a,b)=>b[1]-a[1]);
+  const maxDist = sortedDist[0]?.[1] || 1;
+  document.getElementById('entity-dist').innerHTML = sortedDist.map(([t,c])=>`
+    <div class="entity-bar">
+      <span style="min-width:80px;color:${ENTITY_COLORS[t]||'var(--text2)'};font-weight:600">${t}</span>
+      <div class="bar-track"><div class="bar-fill" style="width:${(c/maxDist*100).toFixed(1)}%;background:${ENTITY_COLORS[t]||'var(--accent)'}"></div></div>
+      <span style="color:var(--text3)">${c}</span>
+    </div>`).join('');
+
+  // Detector versions
+  const dv = {};
+  data.forEach(f=>{ if(f.detector_version) dv[f.detector_version]=(dv[f.detector_version]||0)+1; });
+  document.getElementById('detector-versions').innerHTML = Object.entries(dv).length ?
+    Object.entries(dv).sort((a,b)=>b[1]-a[1]).map(([v,c])=>`
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px">
+        <span style="color:var(--accent)">${v}</span><span style="color:var(--text3)">${c}×</span>
+      </div>`).join('') : '<div class="empty-state" style="padding:16px">—</div>';
+
+  // Policy versions
+  const pv = {};
+  data.forEach(f=>{ if(f.policy_version) pv[f.policy_version]=(pv[f.policy_version]||0)+1; });
+  document.getElementById('policy-versions').innerHTML = Object.entries(pv).length ?
+    Object.entries(pv).sort((a,b)=>b[1]-a[1]).map(([v,c])=>`
+      <div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px">
+        <span style="color:var(--text2)">${v}</span><span style="color:var(--text3)">${c}×</span>
+      </div>`).join('') : '<div class="empty-state" style="padding:16px">—</div>';
+
+  // Top placeholders
+  const ph = {};
+  data.forEach(f=>{ if(f.placeholder) ph[f.placeholder]=(ph[f.placeholder]||0)+1; });
+  const sortedPh = Object.entries(ph).sort((a,b)=>b[1]-a[1]).slice(0,8);
+  document.getElementById('top-placeholders').innerHTML = sortedPh.map(([p,c])=>`
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:9px">
+      <span style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:180px" title="${p}">${p}</span>
+      <span style="color:var(--text2);flex-shrink:0">${c}×</span>
+    </div>`).join('');
+}
+
+function applyPrivFilter() {
+  const typeF = document.getElementById('pf-type').value;
+  const confF = parseFloat(document.getElementById('pf-conf').value);
+  const filtered = allFindings.filter(f=>
+    (!typeF || f.entity_type === typeF) && (f.confidence||0) >= confF
+  );
+  document.getElementById('log-count').textContent = `// ${filtered.length}`;
+  renderTable(filtered);
+}
+
+function renderTable(data) {
+  document.getElementById('priv-tbody').innerHTML = data.map(f => {
+    const color = ENTITY_COLORS[f.entity_type] || 'var(--text2)';
+    const pct   = Math.round((f.confidence||0)*100);
+    const isLow = (f.confidence||0) < 0.7;
+    const isHighRisk = (f.privacy_risk_score || 0) > 0.15 || f.affected_routing;
+    const tid   = f.ticket_id || '';
+    return `<tr class="filter-ready${isHighRisk ? ' high-risk-row' : ''}" style="cursor:pointer" onclick="openFindingDetail('${f.stream_id||''}','${tid}')"
+      onmouseover="this.style.background='var(--bg2)'" onmouseout="this.style.background=''">
+      <td style="font-family:var(--mono);font-size:10px">
+        ${tid ? `<span style="color:var(--accent);text-decoration:underline;cursor:pointer" onclick="event.stopPropagation();openTicketModal('${tid}')" title="View full ticket decision">${tid}</span>` : '—'}
+      </td>
+      <td style="font-family:var(--mono);font-size:9px;color:var(--text3)">${f.stream_id||'—'}</td>
+      <td><span style="font-family:var(--mono);font-size:10px;font-weight:600;color:${color}">${f.entity_type||'—'}</span></td>
+      <td style="font-family:var(--mono);font-size:9px;color:var(--text3)">${f.placeholder||'—'}</td>
+      <td><div style="display:flex;align-items:center;gap:8px">
+        <div style="width:50px;height:3px;background:var(--bg3);border-radius:2px;overflow:hidden">
+          <div style="width:${pct}%;height:100%;background:${isLow?'var(--critical)':'var(--accent)'};border-radius:2px"></div>
+        </div>
+        <span style="font-family:var(--mono);font-size:10px;color:${isLow?'var(--critical)':'var(--text)'}">${pct}%</span>
+      </div></td>
+      <td style="font-family:var(--mono);font-size:9px;color:var(--text3)">${f.policy_version||'—'}</td>
+      <td style="font-family:var(--mono);font-size:9px;color:var(--text3)">${f.detector_version||'—'}</td>
+      <td style="font-family:var(--mono);font-size:9px;color:var(--text3)">${fmtDate(f.created_at)}</td>
+    </tr>`;
+  }).join('');
+}
+
+async function openFindingDetail(streamId, ticketId) {
+  if (!streamId) { if (ticketId) openTicketModal(ticketId); return; }
+  const modal   = document.getElementById('stream-modal');
+  const title   = document.getElementById('stream-modal-title');
+  const content = document.getElementById('stream-modal-content');
+  modal.classList.add('open');
+  title.textContent = `PRIVACY FINDING // ${streamId}`;
+  content.innerHTML = `<div style="padding:20px;font-family:var(--mono);font-size:11px;color:var(--text3);animation:skeleton-pulse 1.2s infinite">Loading…</div>`;
+  try {
+    const d = await apiFetch(`/v1/privacy/audit/${streamId}`);
+    const findings = Array.isArray(d) ? d : (d.findings || [d]);
+    content.innerHTML = `
+      ${ticketId ? `<div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;background:var(--bg2)">
+        <span style="font-size:11px;color:var(--text2)">Related ticket: <strong style="font-family:var(--mono);color:var(--accent)">${ticketId}</strong></span>
+        <button class="btn btn-ghost" style="font-size:10px;padding:3px 10px" onclick="document.getElementById('stream-modal').classList.remove('open');setTimeout(()=>openTicketModal('${ticketId}'),150)">View Decision Trace →</button>
+      </div>` : ''}
+      ${findings.map(f => `
+        <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+            <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:${ENTITY_COLORS[f.entity_type]||'var(--text)'}">${f.entity_type||'—'}</span>
+            <span style="font-family:var(--mono);font-size:9px;color:var(--text3);background:var(--bg2);padding:2px 7px;border-radius:3px">${f.placeholder||'—'}</span>
+            <span style="font-family:var(--mono);font-size:11px;color:var(--text);margin-left:auto;font-weight:600">${Math.round((f.confidence||0)*100)}%</span>
+          </div>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;font-size:11px;color:var(--text3)">
+            <div>Policy: <span style="color:var(--text2)">${f.policy_version||'—'}</span></div>
+            <div>Detector: <span style="color:var(--text2)">${f.detector_version||'—'}</span></div>
+          </div>
+          ${f.privacy_risk_score != null ? `<div style="margin-top:8px;font-size:11px;color:${f.privacy_risk_score>.15?'var(--critical)':'var(--ok)'}">Privacy risk score: <strong>${fmtNum(f.privacy_risk_score,3)}</strong> → ${f.privacy_risk_score>.15?'Elevated escalation probability':'Within threshold'}</div>` : ''}
+          ${f.affected_routing ? `<div style="margin-top:6px;font-size:10px;color:var(--warn)">⚠ Privacy risk affected routing confidence or escalation</div>` : ''}
+        </div>`).join('')}`;
+  } catch(e) {
+    content.innerHTML = `<div style="color:var(--critical);font-size:12px;padding:16px">⚠ ${e.message}</div>`;
+  }
+}
+
+function exportCsv() {
+  const typeF = document.getElementById('pf-type').value;
+  const confF = parseFloat(document.getElementById('pf-conf').value);
+  const filtered = allFindings.filter(f=>(!typeF||f.entity_type===typeF)&&(f.confidence||0)>=confF);
+  const rows = [['ticket_id','stream_id','entity_type','placeholder','confidence','policy_version','detector_version','created_at']];
+  filtered.forEach(f=>rows.push([f.ticket_id,f.stream_id,f.entity_type,f.placeholder,f.confidence,f.policy_version,f.detector_version,f.created_at]));
+  const a = document.createElement('a');
+  a.href = 'data:text/csv;charset=utf-8,'+encodeURIComponent(rows.map(r=>r.join(',')).join('\n'));
+  a.download = 'privacy_audit.csv';
+  a.click();
+}
+
+initPage();
+loadPrivacy();
+startAutoRefresh(loadPrivacy, 45);
+</script>
+</body>
+</html>

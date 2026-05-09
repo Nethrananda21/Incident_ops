@@ -86,7 +86,8 @@ services:
 
   review-ui:
     build:
-      context: ./services/review-ui
+      context: .
+      dockerfile: services/review-ui/Dockerfile
     ports:
       - "8081:80"
     depends_on:

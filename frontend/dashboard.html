@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>INCIDENT_OPS // DASHBOARD</title>
+  <link rel="stylesheet" href="shared.css?v=20260509-nav9">
+  <style>
+    .kpi-num {
+      font-family: var(--mono);
+      font-size: 30px;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1;
+    }
+
+    .kpi-num.warn {
+      color: var(--warn);
+    }
+
+    .kpi-num.ok {
+      color: var(--ok);
+    }
+
+    .route-dist-bar {
+      display: flex;
+      height: 12px;
+      border-radius: 2px;
+      overflow: hidden;
+      margin: 10px 0 6px;
+    }
+
+    .route-dist-bar div {
+      transition: width .6s ease;
+    }
+
+    .route-legend {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text3);
+    }
+
+    .route-legend span {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+
+    .route-legend b {
+      width: 8px;
+      height: 8px;
+      border-radius: 1px;
+      display: inline-block;
+    }
+
+    .recent-ticket-head,
+    .recent-ticket-row {
+      display: grid;
+      grid-template-columns:
+        minmax(180px, .95fr)
+        minmax(280px, 2fr)
+        minmax(130px, .75fr)
+        minmax(150px, .78fr)
+        minmax(88px, .45fr)
+        minmax(78px, .4fr);
+      gap: 14px;
+      align-items: center;
+      min-width: 980px;
+    }
+
+    .recent-ticket-head {
+      padding: 8px 16px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .recent-ticket-head span {
+      font-family: var(--mono);
+      font-size: 9px;
+      color: var(--text3);
+      letter-spacing: 0.1em;
+      min-width: 0;
+    }
+
+    .recent-ticket-row {
+      padding: 10px 16px;
+      border-bottom: 1px solid var(--border);
+      cursor: pointer;
+      transition: background .12s;
+    }
+
+    .recent-ticket-row:hover {
+      background: var(--bg2);
+    }
+
+    .recent-ticket-row > span,
+    .recent-ticket-row > div {
+      min-width: 0;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="topbar">
+    <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+    <div class="center">
+      <div class="page-title">Dashboard // NOC Overview</div>
+    </div>
+    <div class="right">
+      <div id="status-pill">
+        <div class="dot"></div><span>LIVE</span>
+      </div>
+      <div id="utc-clock"></div>
+    </div>
+  </div>
+  <nav id="sidebar" aria-label="Primary navigation">
+    <div class="nav-section">OPERATIONS</div>
+    <a class="nav-item active" href="dashboard.html"><span>Dashboard</span></a>
+    <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+    <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+    <a class="nav-item" href="search.html"><span>Search</span></a>
+    <div class="nav-section">ANALYTICS</div>
+    <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+    <div class="nav-section">DATA</div>
+    <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+    <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+    <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+  </nav>
+  <main id="main">
+    <div class="page-header">
+      <h1>Dashboard // NOC Overview</h1>
+      <p>Live snapshot from <span style="font-family:var(--mono);color:var(--accent)">GET /v1/dashboard</span></p>
+    </div>
+    <div id="dash-error"></div>
+
+    <!-- BACKEND HEALTH -->
+    <details class="card mb-1" style="padding:0">
+      <summary
+        style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none">
+        <div class="card-title" style="margin:0">Backend Readiness</div>
+        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px"
+          onclick="event.preventDefault();event.stopPropagation();renderHealthPanel('health-panel')">↺ Recheck</button>
+      </summary>
+      <div style="padding:16px" id="health-panel">
+        <div style="font-size:12px;color:var(--text3);animation:skeleton-pulse 1.2s infinite">Checking backend…</div>
+      </div>
+    </details>
+
+    <!-- KPI ROW -->
+    <div class="kpi-grid mb-1" style="grid-template-columns:repeat(5,1fr)">
+      <div class="kpi-card">
+        <div class="kpi-label">TOTAL TICKETS</div>
+        <div class="kpi-num" id="k-total">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">ESCALATIONS</div>
+        <div class="kpi-num warn" id="k-esc">—</div>
+        <div class="kpi-sub" id="k-esc-rate">—% escalation rate</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">AVG CONFIDENCE</div>
+        <div class="kpi-num" id="k-conf">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">CACHE HIT RATE</div>
+        <div class="kpi-num ok" id="k-cache">—</div>
+      </div>
+      <div class="kpi-card">
+        <div class="kpi-label">AVG LATENCY</div>
+        <div class="kpi-num" id="k-lat">—</div>
+        <div class="kpi-sub">ms</div>
+      </div>
+    </div>
+
+    <!-- ROUTE DISTRIBUTION -->
+    <div class="card mb-1">
+        <div class="card-title">ROUTE PATH DISTRIBUTION</div>
+        <div class="route-dist-bar" id="route-bar">
+          <div style="width:0%;background:var(--ok)" id="rb-cache"></div>
+          <div style="width:0%;background:var(--accent)" id="rb-rag"></div>
+          <div style="width:0%;background:var(--warn)" id="rb-ood"></div>
+          <div style="width:0%;background:var(--critical)" id="rb-hr"></div>
+        </div>
+        <div class="route-legend">
+          <span><b style="background:var(--ok)"></b>semantic cache <span id="rl-cache">—</span></span>
+          <span><b style="background:var(--accent)"></b>generative rag <span id="rl-rag">—</span></span>
+          <span><b style="background:var(--warn)"></b>out of dist. <span id="rl-ood">—</span></span>
+          <span><b style="background:var(--critical)"></b>human review <span id="rl-hr">—</span></span>
+        </div>
+        <div id="route-count-detail" style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3)">
+        </div>
+    </div>
+
+    <!-- RECENT TICKETS -->
+    <div class="card" style="padding:0;overflow-x:auto">
+      <div
+        style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div class="card-title" style="margin:0">RECENT TICKETS</div>
+        <a href="search.html"
+          style="font-family:var(--mono);font-size:9px;color:var(--accent);text-decoration:none;letter-spacing:0.08em">VIEW
+          ALL →</a>
+      </div>
+      <div class="recent-ticket-head">
+        <span>TICKET</span>
+        <span>DESCRIPTION</span>
+        <span>CATEGORY</span>
+        <span>ROUTE PATH</span>
+        <span>CONFIDENCE</span>
+        <span>SLA RISK</span>
+      </div>
+      <div id="recent-tickets-body">
+        <div id="recent-skel"></div>
+      </div>
+    </div>
+  </main>
+  <div class="modal-overlay" id="ticket-modal">
+    <div class="modal-box">
+      <div class="modal-header">
+        <div class="modal-title" id="modal-ticket-id">TICKET //</div>
+        <button class="modal-close" onclick="closeModal()">✕</button>
+      </div>
+      <div id="modal-content"></div>
+    </div>
+  </div>
+  <script src="shared.js?v=20260509-nav9"></script>
+  <script>
+    const ROUTE_PATHS = ['semantic_cache', 'generative_rag', 'out_of_distribution', 'human_review_required'];
+
+    async function loadDashboard() {
+      showSkeleton('recent-skel', 8);
+      try {
+        const d = await apiFetch('/v1/dashboard');
+        const recent = await apiFetch('/v1/tickets/search?limit=8').catch(() => ({ tickets: d.recent_tickets || [] }));
+        const routing = d.routing || {};
+        const decisions = routing.decisions || routing.routing_decisions_total || d.routing_decisions_total || 0;
+
+        // KPIs
+        countUp('k-total', d.tickets_total || 0, '', 600);
+        countUp('k-esc', routing.escalations || 0, '', 600);
+        document.getElementById('k-esc-rate').textContent =
+          decisions ? ((routing.escalations || 0) / decisions * 100).toFixed(1) + '% escalation rate' : '—% escalation rate';
+        if (routing.avg_confidence != null) countUp('k-conf', Number((routing.avg_confidence * 100).toFixed(1)), '%', 600);
+        else document.getElementById('k-conf').textContent = '—';
+        if (decisions) countUp('k-cache', Number(((routing.semantic_cache_hits || 0) / decisions * 100).toFixed(1)), '%', 600);
+        else document.getElementById('k-cache').textContent = '—';
+        document.getElementById('k-lat').textContent =
+          routing.avg_latency_ms != null ? Math.round(routing.avg_latency_ms) : '—';
+        // Route distribution
+        const dist = Object.fromEntries((routing.route_paths || []).map(r => [r.name, r.count]));
+        const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
+        const ids = ['cache', 'rag', 'ood', 'hr'];
+        const keys = ROUTE_PATHS;
+        keys.forEach((k, i) => {
+          const v = dist[k] || 0;
+          const pct = (v / total * 100).toFixed(1);
+          const bar = document.getElementById('rb-' + ids[i]);
+          if (bar) bar.style.width = pct + '%';
+          const lbl = document.getElementById('rl-' + ids[i]);
+          if (lbl) lbl.textContent = `(${v})`;
+        });
+
+        // Recent tickets
+        const tickets = recent.tickets || d.recent_tickets || [];
+        const body = document.getElementById('recent-tickets-body');
+        if (!tickets.length) {
+          body.innerHTML = '<div class="empty-state">// No recent tickets</div>';
+          return;
+        }
+        body.innerHTML = tickets.map(raw => {
+          const t = normalizeTicketPayload(raw);
+          const id = t.ticket_id || t.id;
+          const conf = t.confidence_score != null ? Math.round(t.confidence_score * 100) + '%' : '—';
+          const confColor = t.confidence_score == null ? 'var(--text3)' : t.confidence_score < .65 ? 'var(--critical)' : t.confidence_score < .85 ? 'var(--warn)' : 'var(--ok)';
+          return `
+      <div class="recent-ticket-row" onclick="openTicketModal('${t.ticket_id || t.id}')">
+        <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)" title="${html(id || '')}">${id || '—'}</span>
+        <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description || '')}">${html(t.short_description || '—')}</span>
+        <span style="font-size:10px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
+        ${routePathBadge(t.route_path)}
+        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${confColor}">${conf}</span>
+        ${slaRiskBadge(t.sla_risk)}
+      </div>`;
+        }).join('');
+      } catch (e) {
+        showError('dash-error', e.message, e.status || '');
+        document.getElementById('recent-skel').innerHTML = '';
+      }
+    }
+
+    initPage();
+    renderHealthPanel('health-panel');
+    loadDashboard();
+    startAutoRefresh(loadDashboard, 20);
+  </script>
+</body>
+
+</html>

@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // HUMAN REVIEW</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.review-3col { display:grid;grid-template-columns:320px 1fr 340px;gap:10px;height:calc(100vh - 190px); }
+.queue-col   { display:flex;flex-direction:column;background:var(--bg1);border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+.queue-scroll{ flex:1;overflow-y:auto; }
+.evidence-col{ overflow-y:auto;background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px; }
+.action-col  { display:flex;flex-direction:column;gap:10px;overflow-y:auto; }
+.queue-item  { padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s; }
+.queue-item:hover { background:#f5f8ff; }
+.queue-item.selected { background:#eff6ff;border-left:3px solid var(--accent); }
+.queue-item.urgent   { border-left:0; }
+.queue-item.selected.urgent { border-left:3px solid var(--accent); }
+.queue-item-head { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;margin-bottom:6px; }
+.queue-ticket-id { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text); }
+.queue-date { white-space:nowrap;font-size:10px;color:var(--text3); }
+.queue-route { margin-bottom:8px; }
+.queue-category { font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px; }
+.bar-row { margin-bottom:11px; }
+.bar-label { display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px; }
+.bar-track { height:6px;background:var(--bg3);border-radius:999px;overflow:hidden; }
+.bar-fill  { height:100%;border-radius:999px;transition:width .4s; }
+.history-row { display:grid;grid-template-columns:110px 75px 95px 70px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Human Review // Escalation Queue</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item active" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Human Review // Escalation Queue</h1>
+    <p>Act on AI-escalated tickets · <span style="font-family:var(--mono);color:var(--accent)">GET /v1/escalations</span> · <span style="font-family:var(--mono);color:var(--accent)">POST /v1/review/escalations</span></p>
+  </div>
+  <div id="esc-error"></div>
+
+  <div class="review-3col">
+
+    <!-- LEFT: Queue -->
+    <div class="queue-col">
+      <div style="padding:10px 16px;border-bottom:1px solid var(--border);background:var(--bg2);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+        <span style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Queue</span>
+        <span style="font-family:var(--mono);font-size:11px;color:var(--text3)" id="queue-count">— tickets</span>
+      </div>
+      <div class="queue-scroll" id="queue-list">
+        <div id="queue-skel" style="padding:8px"></div>
+      </div>
+    </div>
+
+    <!-- CENTRE: Decision Evidence -->
+    <div class="evidence-col" id="evidence-col">
+      <div class="empty-state" style="padding:60px 20px;text-align:center">Select a ticket to view decision evidence.</div>
+    </div>
+
+    <!-- RIGHT: Review Action Form -->
+    <div class="action-col" id="action-col">
+      <div class="card" style="display:flex;align-items:center;justify-content:center;min-height:200px;border-radius:8px">
+        <div class="empty-state">Select a ticket to review.</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Review History -->
+  <div class="card" style="padding:0;margin-top:10px">
+    <div style="padding:11px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+      <div class="card-title" style="margin:0">Review History</div>
+      <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px" onclick="loadHistory()">↺ Refresh</button>
+    </div>
+    <div style="display:grid;grid-template-columns:110px 75px 95px 70px 1fr;gap:8px;padding:7px 14px;background:var(--bg2);border-bottom:1px solid var(--border)">
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Ticket</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Action</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Reviewer</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Time</span>
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Notes</span>
+    </div>
+    <div style="max-height:200px;overflow-y:auto" id="history-list">
+      <div class="empty-state">No review events yet.</div>
+    </div>
+  </div>
+</main>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+let selected = null;
+let allEsc   = [];
+
+/* ── QUEUE ── */
+async function loadEscalations() {
+  showSkeleton('queue-skel', 5);
+  try {
+    const res = await apiFetch('/v1/escalations');
+    allEsc = res.escalations || [];
+    document.getElementById('queue-count').textContent = `${allEsc.length} ticket${allEsc.length!==1?'s':''}`;
+    const list = document.getElementById('queue-list');
+    list.innerHTML = '';
+    if (!allEsc.length) { list.innerHTML='<div class="empty-state">No escalations pending.</div>'; return; }
+    list.innerHTML = allEsc.map(t => {
+      const id = t.ticket_id||t.id;
+      const urgent = (t.confidence_score || 1) < 0.65 || (t.privacy_risk || 0) > 0.15;
+      return `<div class="queue-item${urgent?' urgent':''}" id="qi-${id}" onclick="selectTicket('${id}')">
+        <div class="queue-item-head">
+          <span class="queue-ticket-id" title="${html(id||'')}">${id}</span>
+          <span class="queue-date">${fmtDate(t.created_at)}</span>
+        </div>
+        <div class="queue-route">${routePathBadge(t.route_path)}</div>
+        <div class="queue-category">${html(t.assigned_category || 'Escalated routing decision')}</div>
+        <div style="display:flex;gap:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">
+          <span>conf <strong style="color:${(t.confidence_score||0)<.65?'var(--critical)':'var(--text)'}">${t.confidence_score!=null?Math.round(t.confidence_score*100)+'%':'—'}</strong></span>
+          <span>retr ${fmtNum(t.retrieval_similarity,2)}</span>
+        </div>
+      </div>`;
+    }).join('');
+  } catch(e) {
+    showError('esc-error', e.message, e.status);
+    clearContainer('queue-skel');
+  }
+}
+
+/* ── SELECT → POPULATE EVIDENCE + FORM ── */
+async function selectTicket(id) {
+  selected = allEsc.find(t=>(t.ticket_id||t.id)===id);
+  document.querySelectorAll('.queue-item').forEach(el=>el.classList.remove('selected'));
+  document.getElementById('qi-'+id)?.classList.add('selected');
+  if (!selected) return;
+  document.getElementById('evidence-col').innerHTML = `<div class="card" style="border-radius:8px"><div class="empty-state">Loading full ticket evidence...</div></div>`;
+  try {
+    const detail = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(id)}`);
+    selected = { ...selected, ...detail };
+  } catch(e) {
+    selected = { ...selected, detail_error: e.message };
+  }
+  const t = normalizeTicketPayload(selected);
+
+  /* ── CENTRE: evidence (slides in when ticket selected) ── */
+  document.getElementById('evidence-col').innerHTML = `
+    <div class="drawer-animate">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;flex-wrap:wrap">
+        <span style="font-size:15px;font-weight:700;color:var(--text)">${id}</span>
+        ${routePathBadge(t.route_path)}
+        ${statusBadge(t.status||'human_review_required')}
+      </div>
+      ${selected.detail_error ? `<div style="margin-bottom:12px;font-size:11px;color:var(--warn)">Full detail unavailable: ${html(selected.detail_error)}</div>` : ''}
+      ${buildDetailContent(t)}
+    </div>`;
+
+  /* ── RIGHT: action form ── */
+  document.getElementById('action-col').innerHTML = `
+    <div class="card" style="border-radius:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:14px">Review Actions</div>
+
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        <button class="btn btn-approve" style="width:100%" onclick="submitReview('${id}','approve')">✓ Approve AI Decision</button>
+        <button class="btn btn-reject"  style="width:100%" onclick="submitReview('${id}','reject')">✕ Reject — Needs Correction</button>
+      </div>
+      <div class="review-submit-err" style="display:none;margin-bottom:10px;font-size:11px;color:var(--critical)"></div>
+
+      <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:10px">Correct & Override</div>
+
+      <label>CORRECTED CATEGORY</label>
+      <input id="cc-cat-${id}" placeholder="e.g. Network">
+      <label>CORRECTED GROUP</label>
+      <input id="cc-grp-${id}" placeholder="e.g. Network_Ops">
+      <label>CORRECTED RESOLUTION</label>
+      <textarea id="cc-res-${id}" rows="3" placeholder="Enter correct resolution…"></textarea>
+      <label>REVIEWER NOTES</label>
+      <input id="cc-notes-${id}" placeholder="Why is the AI decision wrong?">
+
+      <div style="margin-top:12px">
+        <button class="btn btn-primary" style="width:100%" onclick="submitReview('${id}','corrected')">Submit Correction</button>
+      </div>
+    </div>`;
+}
+
+/* ── SUBMIT ── */
+async function submitReview(id, action) {
+  const payload = {
+    ticket_id: id,
+    decision: action,
+    reviewer:                   getReviewerName(),
+    corrected_category:         document.getElementById('cc-cat-'+id)?.value||undefined,
+    corrected_assignment_group: document.getElementById('cc-grp-'+id)?.value||undefined,
+    corrected_resolution:       document.getElementById('cc-res-'+id)?.value||undefined,
+    notes:                      document.getElementById('cc-notes-'+id)?.value||undefined,
+  };
+  const btn = event?.target;
+  const originalText = btn?.textContent || 'Submit';
+  if(btn) { btn.disabled=true; btn.textContent='Submitting…'; }
+  try {
+    await apiFetch('/v1/review/escalations',{method:'POST',body:JSON.stringify(payload)});
+    // Fade queue item out
+    const qi = document.getElementById('qi-'+id);
+    if(qi) { qi.style.transition='opacity .3s,max-height .4s'; qi.style.opacity='0'; qi.style.maxHeight='0'; qi.style.overflow='hidden'; setTimeout(()=>qi.remove(),400); }
+    allEsc = allEsc.filter(t=>(t.ticket_id||t.id)!==id);
+    setTimeout(()=>{ document.getElementById('queue-count').textContent=`${allEsc.length} tickets`; },400);
+    document.getElementById('evidence-col').innerHTML=`<div class="solved-banner anim-fade" style="border-radius:8px;display:inline-flex">✓ ${action.charAt(0).toUpperCase()+action.slice(1)} submitted for ${id}</div>`;
+    document.getElementById('action-col').innerHTML='';
+    loadHistory();
+  } catch(e) {
+    if(btn) { btn.disabled=false; btn.textContent=originalText; }
+    // Shake + inline error (no alert)
+    const card = btn?.closest('.card');
+    if(card) { card.classList.remove('shake-once'); void card.offsetWidth; card.classList.add('shake-once'); }
+    const errEl = card?.querySelector('.review-submit-err');
+    if(errEl) { errEl.textContent='⚠ '+e.message; errEl.style.display='block'; setTimeout(()=>{errEl.style.display='none';},4000); }
+  }
+}
+
+/* ── HISTORY ── */
+async function loadHistory() {
+  const AC={approve:'var(--ok)',reject:'var(--critical)',corrected:'var(--warn)'};
+  try {
+    const res=await apiFetch('/v1/review/events');
+    const events=res.recent || [];
+    const list=document.getElementById('history-list');
+    list.innerHTML=events.length
+      ? events.map(e=>`<div class="history-row">
+          <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)">${e.ticket_id||'—'}</span>
+          <span style="font-size:11px;font-weight:600;color:${AC[e.decision]||'var(--text2)'}">${(e.decision||'').toUpperCase()}</span>
+          <span>${e.reviewer||'—'}</span>
+          <span style="font-family:var(--mono);font-size:10px;color:var(--text3)">${fmtDate(e.created_at)}</span>
+          <span style="color:var(--text3);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${e.notes||'—'}</span>
+        </div>`).join('')
+      : '<div class="empty-state">No review events.</div>';
+  } catch {}
+}
+
+initPage();
+loadEscalations();
+loadHistory();
+startAutoRefresh(() => { loadEscalations(); loadHistory(); }, 30);
+</script>
+</body>
+</html>

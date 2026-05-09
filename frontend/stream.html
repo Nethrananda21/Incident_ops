@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // TICKET STREAM</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.stream-thead {
+  display:grid;grid-template-columns:minmax(165px,.9fr) minmax(280px,2fr) minmax(120px,.7fr) minmax(120px,.7fr) 70px 70px minmax(130px,.75fr) 110px;
+  padding:8px 16px;border-bottom:1.5px solid var(--border);gap:10px;
+  min-width:1080px;
+}
+.stream-thead span { font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.ticket-row {
+  display:grid;grid-template-columns:minmax(165px,.9fr) minmax(280px,2fr) minmax(120px,.7fr) minmax(120px,.7fr) 70px 70px minmax(130px,.75fr) 110px;
+  align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--border);
+  cursor:pointer;transition:background .12s;
+  min-width:1080px;
+}
+.ticket-row > span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.ticket-row:hover { background:var(--bg2); }
+@keyframes row-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
+.ticket-row.new { animation:row-in .3s ease; }
+.stat-pill {
+  display:inline-flex;align-items:center;gap:6px;padding:4px 12px;
+  border:1px solid var(--border2);border-radius:999px;
+  font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg2);
+}
+.stat-pill strong { color:var(--text);font-weight:700; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center">
+    <div class="page-title">TICKET STREAM // LIVE FEED</div>
+    <div style="display:flex;gap:10px;margin-left:16px">
+      <span class="stat-pill"><span class="live-dot"></span><strong id="s-total">0</strong>&nbsp;received</span>
+      <span class="stat-pill">routed&nbsp;<strong id="s-routed">0</strong></span>
+      <span class="stat-pill">escalated&nbsp;<strong id="s-esc" style="color:var(--critical)">0</strong></span>
+    </div>
+  </div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span id="conn-label">CONNECTING</span></div>
+    <div id="utc-clock">00:00:00 UTC</div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item active" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>TICKET STREAM // LIVE FEED</h1>
+    <p><span class="live-dot"></span><span class="live-label">SSE · <span style="font-family:var(--mono)">GET /v1/tickets/stream</span> · click ticket to open full detail</span></p>
+  </div>
+  <div id="stream-error"></div>
+
+  <!-- Controls -->
+  <div style="display:flex;gap:8px;margin-bottom:14px;align-items:center;flex-wrap:wrap">
+    <button class="btn btn-ghost" id="pause-btn" onclick="togglePause()">⏸&nbsp;Pause</button>
+    <button class="btn btn-ghost" onclick="clearFeed()">✕&nbsp;Clear</button>
+    <select id="f-cat"    style="width:150px" onchange="applyFilters()"><option value="">All Categories</option></select>
+    <select id="f-src"    style="width:130px" onchange="applyFilters()"><option value="">All Sources</option></select>
+    <select id="f-urg"    style="width:130px" onchange="applyFilters()">
+      <option value="">All Urgency</option>
+      <option value="1">P1 Critical</option><option value="2">P2 High</option><option value="3">P3 Medium</option>
+    </select>
+    <select id="f-status" style="width:170px" onchange="applyFilters()">
+      <option value="">All Status</option>
+      <option value="unrouted">unrouted</option>
+      <option value="routed">routed</option>
+      <option value="resolved">resolved</option>
+      <option value="semantic_cache_resolved">semantic cache resolved</option>
+      <option value="human_review_required">human review required</option>
+    </select>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text3)" id="filter-label"></span>
+  </div>
+
+  <!-- Table -->
+  <div class="card" style="padding:0;overflow-x:auto">
+    <div class="stream-thead">
+      <span>TICKET ID</span><span>DESCRIPTION</span><span>CATEGORY</span>
+      <span>GROUP</span><span>URGENCY</span><span>IMPACT</span>
+      <span>STATUS</span><span>RECEIVED</span>
+    </div>
+    <div style="max-height:calc(100vh - 270px);overflow-y:auto" id="stream-feed">
+      <div class="empty-state">Connecting to stream…</div>
+    </div>
+  </div>
+</main>
+<div class="modal-overlay" id="ticket-modal">
+  <div class="modal-box">
+    <div class="modal-header">
+      <div class="modal-title" id="modal-ticket-id">TICKET //</div>
+      <button class="modal-close" onclick="closeModal()">✕</button>
+    </div>
+    <div id="modal-content"></div>
+  </div>
+</div>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+let events = [];   // all received events
+let es = null;     // EventSource
+let paused = false;
+let pauseBuffer = [];
+let stats = { total:0, routed:0, esc:0 };
+const catSet = new Set(), srcSet = new Set();
+let decisionIndex = new Map();
+
+function ticketKey(t) {
+  return t?.ticket_id || t?.id || t?.number;
+}
+
+function mergeTicket(raw) {
+  const id = ticketKey(raw);
+  const decision = id ? decisionIndex.get(id) : null;
+  return normalizeTicketPayload(decision ? { ...raw, ...decision } : raw);
+}
+
+function rebuildFacets() {
+  catSet.clear();
+  srcSet.clear();
+  events.forEach(t => {
+    if(t.category || t.assigned_category) catSet.add(t.assigned_category || t.category);
+    if(t.source) srcSet.add(t.source);
+  });
+}
+
+function refreshStreamView() {
+  rebuildFacets();
+  populateFilters();
+  updateStats();
+  applyFilters();
+}
+
+function setConn(label, ok) {
+  document.getElementById('conn-label').textContent = label;
+  const dot = document.querySelector('#status-pill .dot');
+  if(dot) dot.style.background = ok ? 'var(--ok)' : 'var(--critical)';
+}
+
+function updateStats() {
+  stats = events.reduce((acc, item) => {
+    const s = (item.status || '').toLowerCase();
+    acc.total += 1;
+    if(s==='routed'||s==='resolved'||s==='semantic_cache_resolved') acc.routed += 1;
+    if(s==='human_review_required') acc.esc += 1;
+    return acc;
+  }, { total:0, routed:0, esc:0 });
+  document.getElementById('s-total').textContent  = stats.total;
+  document.getElementById('s-routed').textContent = stats.routed;
+  document.getElementById('s-esc').textContent    = stats.esc;
+}
+
+function populateFilters() {
+  const catEl = document.getElementById('f-cat');
+  const srcEl = document.getElementById('f-src');
+  const prevCat = catEl.value, prevSrc = srcEl.value;
+  catEl.innerHTML = '<option value="">All Categories</option>' +
+    [...catSet].sort().map(c=>`<option${c===prevCat?' selected':''}>${c}</option>`).join('');
+  srcEl.innerHTML = '<option value="">All Sources</option>' +
+    [...srcSet].sort().map(s=>`<option${s===prevSrc?' selected':''}>${s}</option>`).join('');
+}
+
+function applyFilters() {
+  const cat  = document.getElementById('f-cat').value;
+  const src  = document.getElementById('f-src').value;
+  const urg  = document.getElementById('f-urg').value;
+  const stat = document.getElementById('f-status').value;
+  const filtered = events.filter(t =>
+    (!cat  || (t.assigned_category || t.category) === cat) &&
+    (!src  || t.source   === src) &&
+    (!urg  || String(t.urgency)  === String(urg)) &&
+    (!stat || (t.status||'').toLowerCase() === stat)
+  );
+  const feed = document.getElementById('stream-feed');
+  if(!filtered.length) { feed.innerHTML='<div class="empty-state">No tickets match filters.</div>'; return; }
+  feed.innerHTML = filtered.map(buildRow).join('');
+  const fl = document.getElementById('filter-label');
+  fl.textContent = filtered.length < events.length ? `${filtered.length} of ${events.length}` : '';
+}
+
+function buildRow(t) {
+  t = normalizeTicketPayload(t);
+  return `<div class="ticket-row" onclick="openTicketModal('${t.ticket_id||t.id}')">
+    <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)" title="${html(t.ticket_id||t.id||'')}">${t.ticket_id||t.id||'—'}</span>
+    <span style="font-size:11px;color:var(--text2)" title="${html(t.short_description||'')}">${html(t.short_description||'—')}</span>
+    <span style="font-size:10px;color:var(--text2)">${t.assigned_category||t.category||'—'}</span>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${t.assignment_group||t.resolver_group||'—'}</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${t.urgency||'—'}</span>
+    <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${t.impact||'—'}</span>
+    ${statusBadge(t.status||'unrouted')}
+    <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${fmtDate(t.streamed_at||t.created_at)}</span>
+  </div>`;
+}
+
+function ingestEvent(t) {
+  if(paused) { pauseBuffer.push(t); return; }
+  t = mergeTicket(t);
+  // deduplicate by id
+  const id = ticketKey(t);
+  const idx = events.findIndex(e=>ticketKey(e)===id);
+  if(idx >= 0) events[idx] = t; else events.unshift(t);
+  if(events.length > 200) events.pop();
+  refreshStreamView();
+  // flash newest row
+  const firstRow = document.querySelector('.ticket-row');
+  if(firstRow) { firstRow.classList.add('new'); setTimeout(()=>firstRow.classList.remove('new'),400); }
+}
+
+async function refreshDecisionIndex() {
+  const res = await apiFetch('/v1/tickets/search?limit=200');
+  decisionIndex = new Map((res.tickets || []).map(t => [ticketKey(t), t]));
+  events = events.map(mergeTicket);
+  refreshStreamView();
+}
+
+async function loadInitialTickets() {
+  try {
+    const res = await apiFetch('/v1/tickets/search?limit=50');
+    decisionIndex = new Map((res.tickets || []).map(t => [ticketKey(t), t]));
+    events = (res.tickets || []).map(mergeTicket);
+    refreshStreamView();
+  } catch(e) {
+    showError('stream-error', e.message, e.status);
+  }
+}
+
+function startStream() {
+  setConn('CONNECTING', false);
+  es = apiStream('/v1/tickets/stream', ingestEvent, (err) => {
+    setConn('DISCONNECTED', false);
+    showError('stream-error', err.message);
+  });
+  es.addEventListener('open', () => { setConn('LIVE', true); clearContainer('stream-error'); });
+}
+
+function togglePause() {
+  paused = !paused;
+  document.getElementById('pause-btn').textContent = paused ? '▶ Resume' : '⏸ Pause';
+  if(!paused && pauseBuffer.length) {
+    pauseBuffer.forEach(ingestEvent);
+    pauseBuffer = [];
+  }
+}
+
+function clearFeed() {
+  events = []; stats = {total:0,routed:0,esc:0};
+  document.getElementById('stream-feed').innerHTML = '<div class="empty-state">Feed cleared.</div>';
+  updateStats();
+}
+
+initPage();
+loadInitialTickets().finally(() => {
+  startStream();
+  refreshDecisionIndex().catch(()=>{});
+  setInterval(() => refreshDecisionIndex().catch(()=>{}), 10000);
+});
+</script>
+</body>
+</html>

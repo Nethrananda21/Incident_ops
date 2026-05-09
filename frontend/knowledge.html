@@ -1,0 +1,173 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // RAG CORPUS</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.kb-layout { display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:1px;background:var(--border);min-height:calc(100vh - 260px); }
+.kb-table-head,
+.doc-row { display:grid;grid-template-columns:minmax(150px,.95fr) minmax(250px,2fr) minmax(120px,.75fr) minmax(150px,.9fr) minmax(90px,.55fr) minmax(76px,.45fr);gap:12px;min-width:860px; }
+.doc-row { align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s; }
+.doc-row > span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.doc-row:hover,.doc-row.selected { background:var(--bg2); }
+.doc-row.selected { border-left:3px solid var(--accent); }
+.approved-badge { font-family:var(--mono);font-size:8px;color:var(--ok);border:1px solid var(--ok);padding:1px 5px;border-radius:2px;white-space:nowrap; }
+.not-approved { font-family:var(--mono);font-size:8px;color:var(--text3);border:1px solid var(--border2);padding:1px 5px;border-radius:2px;white-space:nowrap; }
+</style>
+
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Knowledge Base // Retrieval Corpus</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item active" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Knowledge Base // Retrieval Corpus</h1>
+    <p>Sanitized historical tickets used for retrieval · <span style="font-family:var(--mono);color:var(--accent)">GET /v1/knowledge</span></p>
+  </div>
+  <div id="kb-error"></div>
+
+  <div class="filter-bar mb-1">
+    <select id="kf-cat" style="width:140px" onchange="applyKbFilter()"><option value="">All Categories</option></select>
+    <select id="kf-src" style="width:130px" onchange="applyKbFilter()"><option value="">All Sources</option></select>
+    <select id="kf-grp" style="width:140px" onchange="applyKbFilter()"><option value="">All Groups</option></select>
+    <label style="display:flex;align-items:center;gap:6px;margin:0;font-family:var(--mono);font-size:10px;color:var(--text2);cursor:pointer">
+      <input type="checkbox" id="kf-missing-res" onchange="applyKbFilter()"> Missing resolution only
+    </label>
+    <span style="margin-left:auto;font-family:var(--mono);font-size:10px;color:var(--text3)" id="kb-count"></span>
+  </div>
+  <div class="kb-layout">
+    <div class="card" style="padding:0;display:flex;flex-direction:column;overflow:auto;">
+      <div class="kb-table-head" style="padding:8px 14px;border-bottom:1.5px solid var(--border)">
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">TICKET</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">DESCRIPTION</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">CATEGORY</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">GROUP</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">SOURCE</span>
+        <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">APPROVED</span>
+      </div>
+      <div style="flex:1;overflow:auto;max-height:calc(100vh - 360px)" id="kb-body">
+        <div id="kb-skel"></div>
+      </div>
+    </div>
+    <div class="card" style="overflow-y:auto;max-height:calc(100vh - 320px)" id="kb-detail">
+      <div class="empty-state">Select a document to view its sanitized text and resolution.</div>
+    </div>
+  </div>
+</main>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+let allDocs = [];
+
+function isApproved(doc) {
+  return doc.source !== 'api' &&
+    (doc.assignment_group || '') !== 'Pending Review' &&
+    !!doc.resolution;
+}
+
+async function loadKnowledge() {
+  showSkeleton('kb-skel', 10);
+  try {
+    const res = await apiFetch('/v1/knowledge');
+    allDocs = res.documents || [];
+    const cats = [...new Set(allDocs.map(d=>d.category).filter(Boolean))].sort();
+    const srcs = [...new Set(allDocs.map(d=>d.source).filter(Boolean))].sort();
+    const grps = [...new Set(allDocs.map(d=>d.assignment_group).filter(Boolean))].sort();
+    const fill = (id, arr) => {
+      const el = document.getElementById(id);
+      el.innerHTML = el.options[0].outerHTML + arr.map(v=>`<option>${v}</option>`).join('');
+    };
+    fill('kf-cat', cats); fill('kf-src', srcs); fill('kf-grp', grps);
+    applyKbFilter();
+  } catch(e) {
+    showError('kb-error', e.message, e.status);
+    clearContainer('kb-skel');
+  }
+}
+
+function applyKbFilter() {
+  const cat   = document.getElementById('kf-cat').value;
+  const src   = document.getElementById('kf-src').value;
+  const grp   = document.getElementById('kf-grp').value;
+  const noRes = document.getElementById('kf-missing-res').checked;
+  const filtered = allDocs.filter(d =>
+    (!cat   || d.category === cat) &&
+    (!src   || d.source   === src) &&
+    (!grp   || d.assignment_group === grp) &&
+    (!noRes || !d.resolution)
+  );
+  document.getElementById('kb-count').textContent = `${filtered.length} of ${allDocs.length} docs`;
+  renderDocs(filtered);
+}
+
+function renderDocs(docs) {
+  const body = document.getElementById('kb-body');
+  if (!docs.length) { body.innerHTML='<div class="empty-state">No documents match.</div>'; return; }
+  body.innerHTML = docs.map(d => {
+    const appr = isApproved(d);
+    const id = d.ticket_id || d.id;
+    return `<div class="doc-row" id="dr-${id}" onclick="openDocDetail('${id}')">
+      <span style="font-family:var(--mono);font-size:10px;font-weight:600;color:var(--text)" title="${html(id||'')}">${id||'—'}</span>
+      <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(d.short_description||'')}">${html(d.short_description||'—')}</span>
+      <span style="font-size:10px;color:var(--text2)">${html(d.category||'—')}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${html(d.assignment_group||'—')}</span>
+      <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${html(d.source||'—')}</span>
+      <span>${appr ? '<span class="approved-badge">✓ YES</span>' : '<span class="not-approved">NO</span>'}</span>
+    </div>`;
+  }).join('');
+}
+
+function openDocDetail(id) {
+  document.querySelectorAll('.doc-row').forEach(r=>r.classList.remove('selected'));
+  document.getElementById('dr-'+id)?.classList.add('selected');
+  const doc = allDocs.find(d=>(d.ticket_id||d.id)===id);
+  if (!doc) return;
+  const appr = isApproved(doc);
+  const panel = document.getElementById('kb-detail');
+  panel.innerHTML = `
+    <div class="drawer-animate">
+    <div class="card-title" style="margin-bottom:12px">${id}</div>
+    <div class="drawer-grid" style="margin-bottom:12px">
+      <div><div class="drawer-label">CATEGORY</div><div class="drawer-value">${html(doc.category||'—')}</div></div>
+      <div><div class="drawer-label">GROUP</div><div class="drawer-value">${html(doc.assignment_group||'—')}</div></div>
+      <div><div class="drawer-label">SOURCE</div><div class="drawer-value" style="font-family:var(--mono);font-size:11px">${html(doc.source||'—')}</div></div>
+    </div>
+    <div style="margin-bottom:12px">
+      ${appr ? '<span class="approved-badge" style="font-size:10px">✓ APPROVED RETRIEVAL CANDIDATE</span>' : '<span class="not-approved" style="font-size:10px">NOT APPROVED — source=api, Pending Review, or no resolution</span>'}
+    </div>
+    <div class="drawer-label">CREATED</div>
+    <div style="font-family:var(--mono);font-size:10px;color:var(--text2);margin-bottom:12px">${fmtDate(doc.created_at)}</div>
+    ${doc.sanitized_text ? `<div class="drawer-label">SANITIZED TEXT</div>
+    <div style="background:var(--bg2);padding:12px;font-size:11px;color:var(--text2);line-height:1.7;margin-bottom:12px;max-height:160px;overflow-y:auto">${html(doc.sanitized_text)}</div>` : ''}
+    ${doc.resolution ? `<div class="drawer-label">RESOLUTION</div>
+    <div style="background:var(--bg2);padding:12px;font-size:11px;color:var(--text2);border-left:2px solid var(--accent);line-height:1.7">${html(doc.resolution)}</div>` :
+    '<div style="font-family:var(--mono);font-size:10px;color:var(--text3);padding:10px;border:1px dashed var(--border2)">No resolution available</div>'}
+    </div>`;
+}
+
+initPage();
+loadKnowledge();
+startAutoRefresh(loadKnowledge, 60);
+</script>
+</body>
+</html>

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // TICKETS</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.tickets-layout { display:grid;grid-template-columns:minmax(0,1fr) 380px;gap:12px;height:calc(100vh - 230px); }
+.list-panel { display:flex;flex-direction:column;background:var(--bg1);border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+.list-header { display:grid;grid-template-columns:minmax(150px,.95fr) minmax(260px,2fr) minmax(120px,.8fr) minmax(140px,.8fr) minmax(58px,.35fr);gap:12px;padding:8px 14px;border-bottom:1.5px solid var(--border);background:var(--bg2);flex-shrink:0;min-width:780px; }
+.list-header span { font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em; }
+.result-row { display:grid;grid-template-columns:minmax(150px,.95fr) minmax(260px,2fr) minmax(120px,.8fr) minmax(140px,.8fr) minmax(58px,.35fr);align-items:center;gap:12px;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s;min-width:780px; }
+.result-row > span,
+.result-row > .route-path-badge { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.result-row:hover { background:#f5f8ff; }
+.result-row.selected { background:#eff6ff;border-left:3px solid var(--accent); }
+@keyframes row-flash { 0%{background:#dbeafe} 100%{background:transparent} }
+.result-row.live-new { animation:row-flash 1.2s ease; }
+.live-chip { display:flex;align-items:center;gap:6px;padding:5px 12px;border:1.5px solid var(--border2);border-radius:6px;background:#fff;cursor:default; }
+.live-chip label { margin:0;font-size:12px;font-weight:600;color:var(--text2);text-transform:none;letter-spacing:0;cursor:pointer; }
+.live-chip input[type=checkbox] { width:auto;margin:0;cursor:pointer; }
+.live-count { font-family:var(--mono);font-size:10px;color:var(--text3); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Tickets // Investigation Workspace</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item active" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Tickets // Investigation Workspace</h1>
+    <p>Search, filter, and investigate tickets. Enable Live Feed to stream incoming events from <span style="font-family:var(--mono);color:var(--accent)">GET /v1/tickets/stream</span>.</p>
+  </div>
+
+  <!-- Filter bar -->
+  <div class="filter-bar mb-1">
+    <div class="live-chip">
+      <div class="live-dot" id="live-dot" style="display:none"></div>
+      <label for="live-toggle">Live Feed</label>
+      <input type="checkbox" id="live-toggle" onchange="toggleLive()">
+      <span class="live-count" id="live-count"></span>
+    </div>
+    <div style="width:1px;background:var(--border);height:28px;align-self:center"></div>
+    <input id="q" placeholder="Search description…" style="flex:1;min-width:150px" onkeydown="if(event.key==='Enter')runSearch()">
+    <select id="f-cat" style="width:130px"><option value="">All Categories</option></select>
+    <select id="f-grp" style="width:135px"><option value="">All Groups</option></select>
+    <select id="f-src" style="width:110px"><option value="">All Sources</option></select>
+    <select id="f-rp" style="width:155px">
+      <option value="">All Route Paths</option>
+      <option value="semantic_cache">semantic cache</option>
+      <option value="generative_rag">generative rag</option>
+      <option value="out_of_distribution">out of distribution</option>
+      <option value="human_review_required">human review required</option>
+    </select>
+    <select id="f-urg" style="width:110px">
+      <option value="">All Urgency</option><option value="1">P1 Critical</option><option value="2">P2 High</option><option value="3">P3 Medium</option>
+    </select>
+    <select id="f-lim" style="width:72px"><option value="50">50</option><option value="100">100</option><option value="200">200</option></select>
+    <button class="btn btn-primary" onclick="runSearch()">Search</button>
+  </div>
+  <div id="search-error"></div>
+
+  <!-- Split view -->
+  <div class="tickets-layout">
+    <!-- Ticket list -->
+    <div class="list-panel">
+      <div class="list-header">
+        <span>TICKET ID</span><span>DESCRIPTION</span><span>CATEGORY</span><span>ROUTE PATH</span><span>CONF</span>
+      </div>
+      <div style="flex:1;overflow:auto" id="results-body">
+        <div class="empty-state">Run a search or enable Live Feed to begin.</div>
+      </div>
+      <div style="padding:7px 14px;border-top:1px solid var(--border);font-size:11px;color:var(--text3);flex-shrink:0" id="result-count"></div>
+    </div>
+
+    <!-- Evidence drawer -->
+    <div class="card" style="overflow-y:auto;height:100%;border-radius:8px" id="detail-panel">
+      <div class="empty-state" style="padding:60px 16px">Select a ticket to see full evidence.</div>
+    </div>
+  </div>
+</main>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+let selectedId = null;
+let liveEs     = null;
+let liveRows   = [];  // received via SSE
+let searchRows = [];  // from API search
+
+/* ── FILTER POPULATION ── */
+async function populateFilters() {
+  try {
+    const res = await apiFetch('/v1/tickets/search?limit=200');
+    const rows = res.tickets || [];
+    const facets = res.facets || {};
+    const fill = (id, key) => {
+      const el  = document.getElementById(id);
+      const facetKey = key === 'category' ? 'categories' : key === 'assignment_group' ? 'assignment_groups' : key === 'source' ? 'sources' : key;
+      const arr = (facets[facetKey] || [...new Set(rows.map(t=>t[key]).filter(Boolean))]).sort();
+      el.innerHTML = el.options[0].outerHTML + arr.map(v=>`<option>${v}</option>`).join('');
+    };
+    fill('f-cat', 'category');
+    fill('f-grp', 'assignment_group');
+    fill('f-src', 'source');
+  } catch {}
+}
+
+/* ── SEARCH ── */
+async function runSearch() {
+  const p = new URLSearchParams();
+  const v = id => document.getElementById(id).value;
+  if(v('q'))    p.set('q', v('q'));
+  if(v('f-cat')) p.set('category', v('f-cat'));
+  if(v('f-grp')) p.set('assignment_group', v('f-grp'));
+  if(v('f-src')) p.set('source', v('f-src'));
+  if(v('f-rp'))  p.set('route_path', v('f-rp'));
+  if(v('f-urg')) p.set('urgency', v('f-urg'));
+  p.set('limit', v('f-lim'));
+  showSkeleton('results-body', 8);
+  clearContainer('search-error');
+  try {
+    const res = await apiFetch('/v1/tickets/search?' + p);
+    searchRows = res.tickets || [];
+    renderRows(searchRows);
+  } catch(e) {
+    showError('search-error', e.message, e.status);
+    clearContainer('results-body');
+  }
+}
+
+/* ── LIVE FEED ── */
+function toggleLive() {
+  const on   = document.getElementById('live-toggle').checked;
+  const dot  = document.getElementById('live-dot');
+  const cnt  = document.getElementById('live-count');
+  if (on) {
+    liveRows = [];
+    dot.style.display = '';
+    cnt.textContent = 'connecting…';
+    clearContainer('search-error');
+    liveEs = apiStream('/v1/tickets/stream', (t) => {
+      const id  = t.ticket_id || t.id;
+      const idx = liveRows.findIndex(x => (x.ticket_id||x.id) === id);
+      if (idx >= 0) liveRows[idx] = t; else liveRows.unshift(t);
+      if (liveRows.length > 300) liveRows.pop();
+      renderRows(liveRows, true);
+      cnt.textContent = `live · ${liveRows.length}`;
+    }, (err) => {
+      cnt.textContent = 'disconnected';
+      showError('search-error', err.message);
+    });
+  } else {
+    liveEs?.close(); liveEs = null;
+    dot.style.display = 'none';
+    cnt.textContent = '';
+    liveRows = [];
+    document.getElementById('results-body').innerHTML = '<div class="empty-state">Live Feed stopped. Run a search to continue.</div>';
+    document.getElementById('result-count').textContent = '';
+  }
+}
+
+/* ── RENDER ── */
+function renderRows(rows, isLive = false) {
+  const body = document.getElementById('results-body');
+  document.getElementById('result-count').textContent =
+    `${rows.length} ticket${rows.length!==1?'s':''}${isLive ? ' · live' : ''}`;
+  if (!rows.length) { body.innerHTML = '<div class="empty-state">No tickets found.</div>'; return; }
+  body.innerHTML = rows.map((t, i) => {
+    t = normalizeTicketPayload(t);
+    const id = t.ticket_id || t.id;
+    return `<div class="result-row${id===selectedId?' selected':''}${isLive&&i===0?' live-new':''}"
+      id="sr-${id}" onclick="openDetail('${id}')">
+      <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)" title="${html(id||'')}">${id||'—'}</span>
+      <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description||'')}">${html(t.short_description||'—')}</span>
+      <span style="font-size:11px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
+      ${routePathBadge(t.route_path)}
+      <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${(t.confidence_score||0)<0.65?'var(--critical)':'var(--text)'}">${t.confidence_score!=null?Math.round(t.confidence_score*100)+'%':'—'}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ── DETAIL ── */
+async function openDetail(id) {
+  selectedId = id;
+  document.querySelectorAll('.result-row').forEach(r => r.classList.remove('selected'));
+  document.getElementById('sr-'+id)?.classList.add('selected');
+  const panel = document.getElementById('detail-panel');
+  panel.innerHTML = `<div style="font-size:12px;color:var(--text3);padding:20px;animation:skeleton-pulse 1.2s infinite">Loading…</div>`;
+  try {
+    const t = await apiFetch(`/v1/tickets/detail/${id}`);
+    panel.innerHTML = `<div class="drawer-animate"><div style="font-size:15px;font-weight:700;color:var(--text);margin-bottom:16px;padding-bottom:12px;border-bottom:1px solid var(--border)">${id}</div>${buildDetailContent(t)}</div>`;
+  } catch(e) {
+    panel.innerHTML = `<div style="color:var(--critical);font-size:12px;padding:16px">⚠ ${e.message}</div>`;
+  }
+}
+
+initPage();
+populateFilters();
+runSearch();
+startAutoRefresh(() => {
+  if (!document.getElementById('live-toggle')?.checked) runSearch();
+}, 45);
+</script>
+</body>
+</html>

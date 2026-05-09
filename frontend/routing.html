@@ -1,0 +1,341 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // ROUTING DESK</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.cc-pill { font-size:11px;color:var(--text2);border:1px solid var(--border);padding:3px 9px;border-radius:5px;display:inline-flex;gap:6px;align-items:center;background:var(--bg2); }
+.cc-pill strong { color:var(--text);font-size:12px; }
+
+/* ── Result fade-in ── */
+@keyframes result-reveal { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:none} }
+.result-revealed { animation: result-reveal .25s ease both; }
+
+/* ── Confidence bar fill animation ── */
+@keyframes bar-grow { from{width:0%} to{width:var(--bar-target)} }
+.animated-bar { animation: bar-grow .45s cubic-bezier(.4,0,.2,1) both; }
+
+/* ── Staggered trace step ── */
+@keyframes trace-step-in { from{opacity:0;transform:translateX(-8px)} to{opacity:1;transform:none} }
+.trace-step { animation: trace-step-in .2s ease both; }
+
+/* ── Gate failure pulse (amber/red, once) ── */
+@keyframes gate-pulse { 0%{box-shadow:0 0 0 0 rgba(220,38,38,.4)} 60%{box-shadow:0 0 0 8px rgba(220,38,38,0)} 100%{box-shadow:none} }
+.gate-fail { animation: gate-pulse .5s ease-out 1 both; }
+@keyframes gate-pulse-warn { 0%{box-shadow:0 0 0 0 rgba(217,119,6,.4)} 60%{box-shadow:0 0 0 8px rgba(217,119,6,0)} 100%{box-shadow:none} }
+.gate-warn { animation: gate-pulse-warn .5s ease-out 1 both; }
+
+/* ── Skeleton shimmer ── */
+.skel-line { height:10px;border-radius:4px;background:var(--bg3);animation:skeleton-pulse 1.4s ease infinite; }
+
+/* ── Threshold reference (collapsed text-only) ── */
+.thresh-ref { padding:10px 16px;font-family:var(--mono);font-size:10px;color:var(--text3);display:flex;flex-wrap:wrap;gap:14px;border-top:1px solid var(--border); }
+.thresh-ref span strong { color:var(--text2); }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Routing Desk // Workbench</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item active" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Routing Desk // Workbench</h1>
+    <p>Submit a ticket to the AI routing engine via <span style="font-family:var(--mono);color:var(--accent)">POST /v1/tickets/route</span></p>
+  </div>
+  <div id="route-error"></div>
+
+  <!-- Input + Result split -->
+  <div class="routing-layout mb-1">
+    <!-- Input -->
+    <div class="card">
+      <div class="card-title">Ticket Input</div>
+      <label>SHORT DESCRIPTION *</label>
+      <input id="r-short" placeholder="One-line summary of the incident">
+      <label>FULL DESCRIPTION</label>
+      <textarea id="r-desc" rows="4" placeholder="Detailed description (optional)"></textarea>
+      <div class="form-row" style="margin-top:0">
+        <div><label>URGENCY</label><select id="r-urg"><option value="1">P1 Critical</option><option value="2">P2 High</option><option value="3" selected>P3 Medium</option></select></div>
+        <div><label>IMPACT</label><select id="r-imp"><option value="1">P1 Global</option><option value="2">P2 Service</option><option value="3" selected>P3 User</option></select></div>
+        <div><label>SOURCE</label><select id="r-src"><option>api</option><option>monitoring</option><option selected>manual</option><option>webhook</option><option>email</option></select></div>
+      </div>
+      <label>TICKET NUMBER (optional)</label>
+      <input id="r-num" placeholder="e.g. INC0012345">
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" style="width:100%" onclick="runRouting()" id="route-btn">▶ Run Routing Engine</button>
+      </div>
+    </div>
+
+    <!-- Agent Decision card -->
+    <div class="card" id="result-card">
+      <div class="card-title">Agent Decision</div>
+      <div id="result-content" class="empty-state" style="padding:40px 16px">Submit a ticket to see the routing decision.</div>
+    </div>
+  </div>
+
+  <!-- Routing thresholds — text-only reference, no animation -->
+  <details class="card" style="padding:0;margin-bottom:12px">
+    <summary style="padding:10px 16px;display:flex;align-items:center;gap:8px;cursor:pointer;list-style:none">
+      <span style="font-size:10px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">Routing Thresholds // Reference</span>
+    </summary>
+    <div class="thresh-ref">
+      <span><strong>Semantic cache</strong> similarity ≥ 0.95</span>
+      <span><strong>RAG path</strong> similarity 0.70–0.95</span>
+      <span><strong>OOD</strong> similarity &lt; 0.70</span>
+      <span><strong>Verifier gate</strong> score ≥ 0.70</span>
+      <span><strong>Routing confidence</strong> score ≥ 0.85</span>
+      <span><strong>Privacy gate</strong> risk ≤ 0.15</span>
+    </div>
+  </details>
+</main>
+<div class="modal-overlay" id="ticket-modal">
+  <div class="modal-box"><div class="modal-header"><div class="modal-title" id="modal-ticket-id">TICKET //</div><button class="modal-close" onclick="closeModal()">✕</button></div><div id="modal-content"></div></div>
+</div>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+/* ── Skeleton for Agent Decision while loading ── */
+const PIPELINE_STEPS = [
+  ['Privacy Node', 'PII gate'],
+  ['Embedding', 'vectorize'],
+  ['ClickHouse Retrieval', 'similarity search'],
+  ['Assessment', 'confidence gates'],
+  ['Branch Decision', 'path select'],
+  ['Final Route Path', 'backend result'],
+];
+
+function renderRoutePipeline(routePath = '', running = false, open = running) {
+  const finalLabel = routePath ? routePath.replace(/_/g, ' ') : 'pending';
+  const trackClass = running ? '' : ' complete';
+  return `
+    <details class="route-pipeline ${running ? 'routing-active' : 'routing-complete'}" style="margin-bottom:16px" ${open ? 'open' : ''}>
+      <summary class="route-pipeline-title">
+        <span>Routing Pipeline</span>
+        <span class="route-pipeline-status">${running ? 'POST /v1/tickets/route running' : 'route_path: ' + finalLabel}</span>
+      </summary>
+      <div class="pipeline-track${trackClass}">
+        ${PIPELINE_STEPS.map(([label, note], i) => {
+          const isFinal = !running && i === PIPELINE_STEPS.length - 1;
+          const nodeClass = running ? 'running' : `done${isFinal ? ' final' : ''}`;
+          const nodeNote = isFinal ? finalLabel : note;
+          return `<div class="pipeline-node ${nodeClass}" style="--delay:${(i * 0.12).toFixed(2)}s">
+            <div class="pipeline-index">${String(i + 1).padStart(2, '0')}</div>
+            <div class="pipeline-label">${label}</div>
+            <div class="pipeline-note">${nodeNote}</div>
+          </div>`;
+        }).join('')}
+        <div class="pipeline-signal" style="grid-column:1/-1"></div>
+      </div>
+    </details>`;
+}
+
+function showDecisionSkeleton() {
+  document.getElementById('result-content').innerHTML = `
+    <div style="padding:16px">
+      ${renderRoutePipeline('', true)}
+      <div class="skel-line" style="width:55%;margin-bottom:12px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px">
+        <div>
+          <div class="skel-line" style="width:60%;margin-bottom:8px;height:8px"></div>
+          <div class="skel-line" style="width:80%;height:14px"></div>
+        </div>
+        <div>
+          <div class="skel-line" style="width:60%;margin-bottom:8px;height:8px"></div>
+          <div class="skel-line" style="width:50%;height:32px"></div>
+        </div>
+      </div>
+      <div class="skel-line" style="width:40%;margin-bottom:10px;height:8px"></div>
+      <div class="skel-line" style="width:100%;margin-bottom:6px"></div>
+      <div class="skel-line" style="width:90%;margin-bottom:6px"></div>
+      <div class="skel-line" style="width:75%"></div>
+    </div>`;
+}
+
+async function runRouting() {
+  const short = document.getElementById('r-short').value.trim();
+  if (!short) { alert('Short description is required'); return; }
+  const btn = document.getElementById('route-btn');
+  btn.disabled = true; btn.textContent = '⏳ Routing…';
+  clearContainer('route-error');
+  showDecisionSkeleton();
+
+  const payload = {
+    short_description: short,
+    description: document.getElementById('r-desc').value.trim() || short,
+    urgency: Number(document.getElementById('r-urg').value),
+    impact:  Number(document.getElementById('r-imp').value),
+    source:  document.getElementById('r-src').value,
+    number:  document.getElementById('r-num').value.trim() || undefined,
+  };
+  try {
+    const r = await apiFetch('/v1/tickets/route', { method:'POST', body: JSON.stringify(payload) });
+    renderResult(r);
+  } catch(e) {
+    showError('route-error', e.message, e.status);
+    document.getElementById('result-content').innerHTML = '<div class="empty-state">Routing failed.</div>';
+  } finally {
+    btn.disabled = false; btn.textContent = '▶ Run Routing Engine';
+  }
+}
+
+/* ── Animated confidence bar helper ── */
+function animatedBar(label, val, gate, gateLabel, weight, delay) {
+  if (val == null) return '';
+  const pct   = Math.round(val * 100);
+  const fail  = gate != null && val < gate;
+  const color = fail ? 'var(--critical)' : val < .8 ? 'var(--warn)' : 'var(--ok)';
+  const pulseClass = fail ? 'gate-fail' : '';
+  return `
+    <div class="bar-row ${pulseClass}" style="margin-bottom:12px;animation-delay:${delay}s">
+      <div style="display:flex;justify-content:space-between;margin-bottom:4px">
+        <span style="font-size:11px;color:var(--text2)">${label} <span style="color:var(--text3);font-size:10px">×${weight}</span></span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:700;color:${color}">${pct}%</span>
+      </div>
+      <div style="height:6px;background:var(--bg3);border-radius:999px;overflow:hidden">
+        <div class="animated-bar" style="--bar-target:${pct}%;height:100%;width:${pct}%;background:${color};border-radius:999px;animation-delay:${delay}s"></div>
+      </div>
+      ${fail ? `<div style="font-size:10px;color:var(--critical);margin-top:3px">✕ Below gate ${gateLabel}</div>` : ''}
+    </div>`;
+}
+
+/* ── Staggered decision trace steps ── */
+function staggeredStep(num, label, color, items, isLast, delay) {
+  const rows = items.filter(([,v]) => v != null && v !== '').map(([k,v]) =>
+    `<div style="display:flex;justify-content:space-between;padding:4px 0;border-bottom:1px solid var(--border);font-size:11px">
+      <span style="color:var(--text3)">${k}</span>
+      <span style="font-family:var(--mono);font-weight:600;color:var(--text)">${v}</span>
+    </div>`).join('');
+  const isFailColor = color === 'var(--critical)';
+  const isWarnColor = color === 'var(--warn)';
+  const stepPulse   = isFailColor ? 'gate-fail' : isWarnColor ? 'gate-warn' : '';
+  return `
+    <div class="trace-step ${stepPulse}" style="display:flex;gap:12px;animation-delay:${delay}s">
+      <div style="display:flex;flex-direction:column;align-items:center;flex-shrink:0">
+        <div style="width:28px;height:28px;border-radius:50%;background:${color}20;border:2px solid ${color};
+          display:flex;align-items:center;justify-content:center;font-family:var(--mono);font-size:11px;font-weight:700;color:${color}">${num}</div>
+        ${!isLast ? `<div style="width:2px;flex:1;min-height:20px;background:${color}30;margin:4px 0"></div>` : ''}
+      </div>
+      <div style="flex:1;padding-bottom:${isLast ? '0' : '16px'}">
+        <div style="font-size:12px;font-weight:700;color:var(--text);margin-bottom:8px;padding-bottom:4px;border-bottom:1.5px solid ${color}30">${label}</div>
+        ${rows || '<div style="font-size:11px;color:var(--text3);font-style:italic">No data</div>'}
+      </div>
+    </div>`;
+}
+
+function renderResult(r) {
+  r = normalizeTicketPayload(r);
+  const confColor = (r.confidence_score||0)<0.65?'var(--critical)':(r.confidence_score||0)<0.85?'var(--warn)':'var(--ok)';
+
+  /* confidence breakdown with animated bars */
+  const cc   = r.confidence_components || {};
+  const clf  = cc.classification ?? cc.classification_confidence ?? r.confidence_score ?? null;
+  const ret  = r.retrieval_similarity ?? null;
+  const ver  = r.verifier_score ?? null;
+  const priv = r.privacy_risk != null ? (1 - r.privacy_risk) : null;
+  const weightedSignal = [clf,ret,ver,priv].every(v=>v==null) ? null :
+    ((clf||0)*.35 + (ret||0)*.25 + (ver||0)*.30 + (priv||0)*.10);
+  const finalConfidence = r.confidence_score;
+  const finalColor = finalConfidence == null ? 'var(--text3)' : finalConfidence<.65?'var(--critical)':finalConfidence<.85?'var(--warn)':'var(--ok)';
+
+  const confSection = (clf!=null||ret!=null||ver!=null||priv!=null) ? `
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:.08em;text-transform:uppercase;margin-bottom:12px;padding-bottom:8px;border-bottom:1.5px solid var(--border)">Confidence Breakdown</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px">
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px">Final Backend Confidence</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${finalColor}">${finalConfidence!=null?Math.round(finalConfidence*100)+'%':'—'}</div>
+        </div>
+        <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px">
+          <div style="font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:5px">Weighted Signal</div>
+          <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${weightedSignal==null?'var(--text3)':weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${weightedSignal!=null?Math.round(weightedSignal*100)+'%':'—'}</div>
+        </div>
+      </div>
+      ${animatedBar('Classification Confidence', clf,  .65, '0.65', '0.35', 0.05)}
+      ${animatedBar('Retrieval Similarity',      ret,  .70, '0.70', '0.25', 0.12)}
+      ${animatedBar('Verifier Score',            ver,  .70, '0.70', '0.30', 0.19)}
+      ${animatedBar('Privacy Safety',            priv, .85, '0.85 (risk≤0.15)', '0.10', 0.26)}
+      <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:11px;margin-top:4px">
+        <span style="color:var(--text3)">Formula: </span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">0.35·clf + 0.25·ret + 0.30·ver + 0.10·privacy</span>
+        ${weightedSignal!=null?`<span style="float:right;font-weight:700;font-family:var(--mono);color:${weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${Math.round(weightedSignal*100)}%</span>`:''}
+      </div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-top:6px">Final backend confidence is authoritative. The weighted signal is shown for auditability; route gates can lower the final score.</div>
+    </div>` : '';
+
+  /* staggered decision trace */
+  const pass = 'var(--ok)', gen = 'var(--accent)', weak = 'var(--warn)', esc = 'var(--critical)';
+  const privColor = r.privacy_risk > 0.15 ? esc : pass;
+  const retColor  = !r.retrieval_similarity ? weak : r.retrieval_similarity>=.7 ? gen : esc;
+  const assColor  = r.route_path==='human_review_required' ? esc : r.route_path==='out_of_distribution' ? weak : pass;
+  const genColor  = r.semantic_cache_hit ? pass : r.route_path==='generative_rag' ? gen : weak;
+  const verColor  = !r.verifier_score ? weak : r.verifier_score>=.7 ? pass : esc;
+
+  const traceSection = `
+    <div style="margin-top:16px">
+      <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid var(--border)">Decision Trace</div>
+      ${staggeredStep(1,'Privacy Gate',privColor,[
+        ['Entities redacted', r.redacted_entities_count??'—'],
+        ['Privacy risk',      fmtNum(r.privacy_risk,3)],
+        ['Gate',             (r.privacy_risk||0)<=0.15?'✓ Passed':'✕ Escalated'],
+      ],false,0.0)}
+      ${staggeredStep(2,'Retrieval',retColor,[
+        ['Matched ticket',   r.matched_ticket_id||'—'],
+        ['Retrieval sim.',   fmtNum(r.retrieval_similarity,3)],
+        ['Branch signal',    !r.retrieval_similarity?'—':r.retrieval_similarity>=.95?'→ Cache':r.retrieval_similarity>=.70?'→ RAG':'→ OOD'],
+      ],false,0.08)}
+      ${staggeredStep(3,'Assessment',assColor,[
+        ['Route path',       r.route_path?.replace(/_/g,' ')||'—'],
+        ['Knowledge gap',    r.knowledge_gap||'none'],
+        ['SLA risk',         r.sla_risk!=null?Math.round(r.sla_risk*100)+'%':'—'],
+      ],false,0.16)}
+      ${staggeredStep(4,'Route Branch',genColor,[
+        ['Cache hit',        r.semantic_cache_hit?'✓ Yes':'No'],
+        ['Escalation flag',  r.escalation_required?'⚠ Yes':'No'],
+      ],false,0.24)}
+      ${staggeredStep(5,'Final Decision',verColor,[
+        ['Verifier score',   fmtNum(r.verifier_score,3)],
+        ['Confidence',       r.confidence_score!=null?Math.round(r.confidence_score*100)+'%':'—'],
+        ['Final status',     r.escalation_required?'Escalated to Human':'Auto-completed'],
+      ],true,0.32)}
+    </div>`;
+
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-revealed">
+      ${renderRoutePipeline(r.route_path, false)}
+      <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:16px">
+        ${routePathBadge(r.route_path)}
+        ${r.semantic_cache_hit?'<span style="font-size:10px;color:var(--ok);background:#dcfce7;border:1px solid #86efac;padding:2px 8px;border-radius:4px;font-weight:600">● Cache Hit</span>':''}
+        ${r.escalation_required?'<span style="font-size:10px;color:var(--critical);background:#fee2e2;border:1px solid #fca5a5;padding:2px 8px;border-radius:4px;font-weight:600">⚠ Escalated</span>':''}
+      </div>
+      ${buildOutcomeSummary(r)}
+      ${buildResolutionPlan(r)}
+      ${r.route_explanation?`<div class="kpi-label">ROUTE EXPLANATION</div><div style="font-size:12px;color:var(--text2);margin-bottom:14px;line-height:1.7">${r.route_explanation}</div>`:''}
+      ${confSection}
+      ${buildMatchedEvidence(r)}
+      ${traceSection}
+    </div>
+  `;
+}
+
+initPage();
+</script>
+</body>
+</html>

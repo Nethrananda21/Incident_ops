@@ -1,0 +1,228 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // ROUTING INTELLIGENCE</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.section-title { font-size:16px;font-weight:700;color:var(--text);letter-spacing:-0.01em;margin:28px 0 14px;display:flex;align-items:center;gap:10px; }
+.section-title::after { content:'';flex:1;height:1px;background:var(--border); }
+.metric-row { display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px; }
+.metric-box { background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px; }
+.metric-box .val { font-size:28px;font-weight:700;letter-spacing:-0.03em;color:var(--text);margin:6px 0 4px; }
+.metric-box .note { font-size:10px;color:var(--text3); }
+.thresh-visual { height:5px;border-radius:999px;margin-top:10px; }
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Routing Intelligence</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item active" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="page-header">
+    <h1>Routing Intelligence</h1>
+    <p>Route quality · resolver capacity · knowledge gaps · reviewer feedback · model quality</p>
+  </div>
+  <div id="intel-error"></div>
+
+  <!-- ── ROUTE QUALITY ── -->
+  <div class="section-title">Route Quality</div>
+  <div class="card mb-1" style="padding:0">
+    <div style="overflow-x:auto">
+      <table class="data-table" style="min-width:900px">
+        <thead><tr>
+          <th>ROUTE PATH</th><th>COUNT</th><th>AVG CONFIDENCE</th>
+          <th>AVG RETRIEVAL</th><th>AVG VERIFIER</th>
+          <th>ESCALATION RATE</th><th>CACHE RATE</th><th>AVG LATENCY</th><th>MEANING</th>
+        </tr></thead>
+        <tbody id="rq-body"><tr><td colspan="9"><div id="rq-skel" style="padding:8px"></div></td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- ── RESOLVER + GAPS ── -->
+  <div class="grid-2 mb-1">
+    <div class="card" style="padding:0">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div class="card-title" style="margin:0">Resolver Capacity</div>
+      </div>
+      <div style="overflow-x:auto"><table class="data-table" id="res-table">
+        <thead><tr><th>GROUP</th><th>WORKLOAD</th><th>OPEN ESC.</th><th>CRITICAL SLA</th><th>LOAD INDEX</th><th>RECOMMENDATION</th></tr></thead>
+        <tbody id="res-body"><tr><td colspan="6"><div id="res-skel" style="padding:8px"></div></td></tr></tbody>
+      </table></div>
+    </div>
+    <div class="card" style="padding:0">
+      <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between">
+        <div class="card-title" style="margin:0">Knowledge Gaps</div>
+        <span style="font-size:10px;color:var(--text3)" id="gaps-count"></span>
+      </div>
+      <div id="gaps-body" style="overflow-y:auto;max-height:260px"><div id="gaps-skel" style="padding:16px"></div></div>
+    </div>
+  </div>
+
+  <!-- ── REVIEWER FEEDBACK ── -->
+  <div class="section-title">Reviewer Feedback</div>
+  <div class="card mb-1" id="feedback-body"></div>
+
+  <!-- ── MODEL QUALITY (from /v1/evaluation) ── -->
+  <div class="section-title" id="model-quality">Model Quality</div>
+  <div id="eval-error"></div>
+  <div class="metric-row" id="eval-metrics">
+    <div class="metric-box"><div class="kpi-label">DATASET ROWS</div><div class="val" id="e-rows">—</div><div class="note">Total ingested tickets</div></div>
+    <div class="metric-box"><div class="kpi-label">ROUTED TICKETS</div><div class="val" id="e-routed">—</div><div class="note">With routing decision</div></div>
+    <div class="metric-box"><div class="kpi-label">LABELED CATEGORIES</div><div class="val" id="e-cats">—</div><div class="note">Unique categories</div></div>
+    <div class="metric-box"><div class="kpi-label">ESCALATION RATE</div><div class="val" id="e-esc" style="color:var(--warn)">—</div><div class="note">Target &lt;20%</div></div>
+    <div class="metric-box"><div class="kpi-label">AVG LATENCY</div><div class="val" id="e-lat">—</div><div class="note">ms · end-to-end</div></div>
+  </div>
+  <div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;margin-bottom:16px">
+    <div class="metric-box">
+      <div class="kpi-label">AVG CONFIDENCE</div>
+      <div class="val" id="e-conf">—</div>
+      <div class="thresh-visual" style="background:linear-gradient(to right,#fee2e2 0%,#fee2e2 65%,#fef3c7 65%,#fef3c7 85%,#dcfce7 85%)"></div>
+      <div class="note" style="margin-top:6px">Gate ≥0.65 route · ≥0.85 auto</div>
+    </div>
+    <div class="metric-box">
+      <div class="kpi-label">AVG RETRIEVAL SIM</div>
+      <div class="val" id="e-ret">—</div>
+      <div class="thresh-visual" style="background:linear-gradient(to right,#fee2e2 0%,#fee2e2 70%,#fef3c7 70%,#fef3c7 95%,#dcfce7 95%)"></div>
+      <div class="note" style="margin-top:6px">OOD &lt;0.70 · RAG 0.70–0.95 · Cache ≥0.95</div>
+    </div>
+    <div class="metric-box">
+      <div class="kpi-label">AVG VERIFIER SCORE</div>
+      <div class="val" id="e-ver">—</div>
+      <div class="thresh-visual" style="background:linear-gradient(to right,#fee2e2 0%,#fee2e2 70%,#dcfce7 70%)"></div>
+      <div class="note" style="margin-top:6px">Gate ≥0.70 — below escalates</div>
+    </div>
+    <div class="metric-box">
+      <div class="kpi-label">CACHE HIT RATE</div>
+      <div class="val" id="e-cache" style="color:var(--ok)">—</div>
+      <div class="kpi-label" style="margin-top:10px">PRIVACY FINDINGS</div>
+      <div style="font-size:22px;font-weight:700;color:var(--warn)" id="e-priv">—</div>
+    </div>
+  </div>
+  <div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px 16px;font-size:12px;color:#1e40af;line-height:1.7">
+    ℹ <strong>Benchmark data</strong> (accuracy, F1, per-category precision/recall) will appear here once the backend exposes <code style="background:#dbeafe;padding:1px 5px;border-radius:3px">benchmark_accuracy</code> and <code style="background:#dbeafe;padding:1px 5px;border-radius:3px">category_metrics</code>.
+  </div>
+</main>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+async function loadIntelligence() {
+  showSkeleton('rq-skel', 4); showSkeleton('res-skel', 3); showSkeleton('gaps-skel', 3);
+  try {
+    const d = await apiFetch('/v1/intelligence/routing');
+
+    const MEANINGS = {
+      semantic_cache: 'Approved historical match reused — no LLM call, fastest path, highest confidence.',
+      generative_rag: 'Moderate match found; NVIDIA LLM generates a new resolution using retrieved context.',
+      out_of_distribution: 'No sufficient historical match — escalated to human, no LLM used.',
+      human_review_required: 'Policy risk, P1 urgency, or P1 impact forces human review before any LLM.',
+    };
+    const rq = d.route_quality || [];
+    document.getElementById('rq-body').innerHTML = rq.length
+      ? rq.map(r=>`<tr>
+          <td>${routePathBadge(r.route_path)}</td>
+          <td style="font-family:var(--mono);font-weight:700">${r.count??'—'}</td>
+          <td style="font-family:var(--mono);color:${(r.avg_confidence||0)<0.65?'var(--critical)':'var(--text)'}">${fmtNum(r.avg_confidence,3)}</td>
+          <td style="font-family:var(--mono)">${fmtNum(r.avg_retrieval_similarity,3)}</td>
+          <td style="font-family:var(--mono)">${fmtNum(r.avg_verifier_score,3)}</td>
+          <td style="font-family:var(--mono);color:var(--warn)">${r.escalation_rate!=null?(r.escalation_rate*100).toFixed(1)+'%':'—'}</td>
+          <td style="font-family:var(--mono);color:var(--ok)">${r.semantic_cache_rate!=null?(r.semantic_cache_rate*100).toFixed(1)+'%':'—'}</td>
+          <td style="font-family:var(--mono)">${r.avg_latency_ms!=null?Math.round(r.avg_latency_ms)+'ms':'—'}</td>
+          <td style="font-size:11px;color:var(--text3);max-width:260px;line-height:1.5">${MEANINGS[r.route_path]||'—'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="9" class="empty-state">No route data.</td></tr>';
+
+    // Resolver capacity
+    const res = d.resolver_capacity || [];
+    document.getElementById('res-body').innerHTML = res.length
+      ? res.map(r=>`<tr>
+          <td style="font-family:var(--mono);font-size:11px">${html(r.group||'—')}</td>
+          <td style="font-family:var(--mono)">${r.workload??'—'}</td>
+          <td style="font-family:var(--mono);color:var(--warn)">${r.open_escalations??'—'}</td>
+          <td style="font-family:var(--mono);color:var(--critical)">${r.critical_sla??'—'}</td>
+          <td style="font-family:var(--mono);color:${(r.load_index||0)>0.8?'var(--critical)':'var(--text)'}">${fmtNum(r.load_index,2)}</td>
+          <td style="font-size:11px;color:var(--text2)">${r.recommendation||'—'}</td>
+        </tr>`).join('')
+      : '<tr><td colspan="6" class="empty-state">No resolver data.</td></tr>';
+
+    // Knowledge gaps
+    const gaps = d.knowledge_gaps || [];
+    document.getElementById('gaps-count').textContent = gaps.length ? `${gaps.length} gaps` : '';
+    const gBody = document.getElementById('gaps-body');
+    gBody.innerHTML = gaps.length ? gaps.map((g,i)=>{
+      const c = g.severity==='critical'?'var(--critical)':g.severity==='elevated'?'var(--warn)':'var(--text3)';
+      const examples = (g.examples||[]).slice(0,3);
+      return `<div style="padding:12px 16px;border-bottom:1px solid var(--border)">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px">
+          <span style="font-weight:600;font-size:12px;color:var(--text)">${html(g.category||'—')}</span>
+          <span style="font-size:9px;font-weight:600;color:${c};border:1px solid ${c};padding:1px 6px;border-radius:4px;text-transform:uppercase">${g.severity||''}</span>
+          <span style="font-size:10px;color:var(--text3);margin-left:auto">${g.count??''}× tickets</span>
+        </div>
+        <div style="font-size:11px;color:var(--text2);margin-bottom:4px">${html(g.reason||'—')}</div>
+        ${g.recommended_action?`<div style="font-size:10px;color:var(--accent);margin-bottom:6px">→ ${html(g.recommended_action)}</div>`:''}
+        ${examples.length?`<div style="font-family:var(--mono);font-size:9px;color:var(--text3);margin-bottom:8px">${examples.map(e=>html(e.ticket_id)).join(' · ')}</div>`:''}
+      </div>`;
+    }).join('') : '<div class="empty-state">No knowledge gaps detected.</div>';
+
+    // Feedback
+    const fb = d.feedback || {};
+    const byDecision = Object.fromEntries((fb.by_decision || []).map(x => [x.decision, x.count]));
+    const approvals = (byDecision.approve || 0) + (byDecision.approved || 0) + (byDecision.accept || 0) + (byDecision.accepted || 0);
+    const corrections = (byDecision.corrected || 0) + (byDecision.edit || 0) + (byDecision.edited || 0) + (byDecision.misrouted || 0) + (byDecision.wrong_category || 0) + (byDecision.wrong_resolution || 0);
+    document.getElementById('feedback-body').innerHTML = `
+      <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:16px">
+        <div><div class="kpi-label">TOTAL EVENTS</div><div style="font-size:26px;font-weight:700;color:var(--text)">${fb.total_events??'—'}</div></div>
+        <div><div class="kpi-label">APPROVALS</div><div style="font-size:26px;font-weight:700;color:var(--ok)">${approvals || '—'}</div></div>
+        <div><div class="kpi-label">CORRECTIONS</div><div style="font-size:26px;font-weight:700;color:var(--warn)">${corrections || '—'}</div></div>
+        <div><div class="kpi-label">CORRECTION RATE</div><div style="font-size:26px;font-weight:700;color:${(fb.correction_rate||0)>0.3?'var(--critical)':'var(--text)'}">${fb.correction_rate!=null?(fb.correction_rate*100).toFixed(1)+'%':'—'}</div></div>
+      </div>
+      ${(fb.by_decision || []).length ? `<div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:14px">${fb.by_decision.map(x => `<span style="font-family:var(--mono);font-size:10px;color:var(--text3);border:1px solid var(--border);border-radius:4px;padding:3px 7px">${html(x.decision)} · ${x.count}</span>`).join('')}</div>` : ''}`;
+  } catch(e) {
+    showError('intel-error', e.message, e.status);
+  }
+}
+
+async function loadModelQuality() {
+  try {
+    const d = await apiFetch('/v1/evaluation');
+    document.getElementById('e-rows').textContent   = d.dataset_rows??'—';
+    document.getElementById('e-routed').textContent = d.routed_tickets??'—';
+    document.getElementById('e-cats').textContent   = d.labeled_categories??'—';
+    document.getElementById('e-esc').textContent    = d.escalation_rate!=null?(d.escalation_rate*100).toFixed(1)+'%':'—';
+    document.getElementById('e-lat').textContent    = d.avg_latency_ms!=null?Math.round(d.avg_latency_ms):'—';
+    document.getElementById('e-conf').textContent   = d.avg_confidence!=null?(d.avg_confidence*100).toFixed(1)+'%':'—';
+    document.getElementById('e-ret').textContent    = fmtNum(d.avg_retrieval_similarity,3);
+    document.getElementById('e-ver').textContent    = fmtNum(d.avg_verifier_score,3);
+    document.getElementById('e-cache').textContent  = d.semantic_cache_hit_rate!=null?(d.semantic_cache_hit_rate*100).toFixed(1)+'%':'—';
+    document.getElementById('e-priv').textContent   = d.privacy_findings??'—';
+  } catch(e) {
+    showError('eval-error', e.message, e.status);
+  }
+}
+
+initPage();
+loadIntelligence();
+loadModelQuality();
+startAutoRefresh(() => { loadIntelligence(); loadModelQuality(); }, 30);
+</script>
+</body>
+</html>

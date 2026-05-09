@@ -1,0 +1,6 @@
+.git
+.DS_Store
+frontend.zip
+**/.DS_Store
+__pycache__/
+*.pyc
