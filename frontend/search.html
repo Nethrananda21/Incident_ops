@@ -187,7 +187,7 @@ function renderRows(rows, isLive = false) {
     t = normalizeTicketPayload(t);
     const id = t.ticket_id || t.id;
     return `<div class="result-row${id===selectedId?' selected':''}${isLive&&i===0?' live-new':''}"
-      id="sr-${id}" onclick="openDetail('${id}')">
+      id="sr-${id}" onclick="openTicketDetail('${id}')">
       <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)" title="${html(id||'')}">${id||'—'}</span>
       <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description||'')}">${html(t.short_description||'—')}</span>
       <span style="font-size:11px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
@@ -199,6 +199,8 @@ function renderRows(rows, isLive = false) {
 
 /* ── DETAIL ── */
 async function openDetail(id) {
+  openTicketDetail(id);
+  return;
   selectedId = id;
   document.querySelectorAll('.result-row').forEach(r => r.classList.remove('selected'));
   document.getElementById('sr-'+id)?.classList.add('selected');

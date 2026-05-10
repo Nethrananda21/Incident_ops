@@ -238,11 +238,58 @@ function countUp(id, target, suffix='', dur=700) {
 
 function routePathBadge(path) {
   if(!path) return '<span style="color:var(--text3);font-size:10px">—</span>';
-  const C={semantic_cache:'var(--ok)',generative_rag:'var(--accent)',out_of_distribution:'var(--warn)',human_review_required:'var(--critical)'};
-  const B={semantic_cache:'#f0fdf4',generative_rag:'#eff6ff',out_of_distribution:'#fffbeb',human_review_required:'#fff5f5'};
+  const C={semantic_cache:'var(--ok)',generative_rag:'var(--accent)',out_of_distribution:'var(--warn)',human_review_required:'var(--critical)',manual_review_requested:'var(--critical)'};
+  const B={semantic_cache:'#f0fdf4',generative_rag:'#eff6ff',out_of_distribution:'#fffbeb',human_review_required:'#fff5f5',manual_review_requested:'#fff5f5'};
   const c=C[path]||'var(--text3)';
   const label=String(path).replace(/_/g,' ');
   return `<span class="route-path-badge" title="${html(label)}" style="font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.06em;color:${c};border:1px solid ${c};border-radius:3px;padding:2px 7px;background:${B[path]||'var(--bg2)'}">${html(label)}</span>`;
+}
+
+function ticketDetailUrl(ticketId) {
+  return `ticket.html?id=${encodeURIComponent(ticketId || '')}`;
+}
+
+function openTicketDetail(ticketId) {
+  if (!ticketId) return;
+  window.location.href = ticketDetailUrl(ticketId);
+}
+
+const MANUAL_REVIEW_KEY = 'incidentops_manual_reviews';
+
+function getManualReviewQueue() {
+  try {
+    return JSON.parse(localStorage.getItem(MANUAL_REVIEW_KEY) || '[]');
+  } catch {
+    return [];
+  }
+}
+
+function saveManualReviewQueue(items) {
+  localStorage.setItem(MANUAL_REVIEW_KEY, JSON.stringify(items || []));
+}
+
+function addManualReview(ticket, reason = 'Operator requested human review from ticket detail page.') {
+  const t = normalizeTicketPayload(ticket || {});
+  const id = t.ticket_id || t.id;
+  if (!id) return null;
+  const queue = getManualReviewQueue().filter(item => (item.ticket_id || item.id) !== id);
+  const item = {
+    ...t,
+    ticket_id: id,
+    status: 'human_review_required',
+    route_path: 'manual_review_requested',
+    escalation_required: true,
+    manual_review_requested: true,
+    manual_review_reason: reason,
+    created_at: new Date().toISOString(),
+  };
+  queue.unshift(item);
+  saveManualReviewQueue(queue.slice(0, 50));
+  return item;
+}
+
+function removeManualReview(ticketId) {
+  saveManualReviewQueue(getManualReviewQueue().filter(item => (item.ticket_id || item.id) !== ticketId));
 }
 
 function statusBadge(s) {
@@ -536,6 +583,8 @@ const buildDrawerContent = buildDetailContent;
    MODAL
 ══════════════════════════════════════════════════════ */
 async function openTicketModal(ticketId) {
+  openTicketDetail(ticketId);
+  return;
   const modal=document.getElementById('ticket-modal');
   const titleEl=document.getElementById('modal-ticket-id');
   const contentEl=document.getElementById('modal-content');
@@ -635,6 +684,7 @@ function initSharedNavigation() {
       ['stream.html', 'Ticket Stream'],
       ['routing.html', 'Routing Desk'],
       ['search.html', 'Search'],
+      ['ticket.html', 'Ticket Detail'],
     ]],
     ['ANALYTICS', [
       ['intelligence.html', 'Intelligence'],

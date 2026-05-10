@@ -1,0 +1,254 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // TICKET DETAIL</title>
+<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<style>
+.ticket-shell { max-width:1180px;margin:0 auto; }
+.ticket-hero {
+  background:var(--bg1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:22px;
+  margin-bottom:14px;
+  box-shadow:0 1px 3px rgba(0,0,0,.05);
+}
+.ticket-top { display:flex;justify-content:space-between;gap:18px;align-items:flex-start; }
+.ticket-id {
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:700;
+  color:var(--text3);
+  margin-bottom:10px;
+  overflow-wrap:anywhere;
+}
+.ticket-title { font-size:24px;font-weight:800;color:var(--text);letter-spacing:-.02em;line-height:1.2;margin-bottom:8px; }
+.ticket-desc { font-size:14px;color:var(--text2);line-height:1.7;max-width:820px; }
+.action-stack { display:flex;gap:8px;flex-wrap:wrap;justify-content:flex-end;flex-shrink:0; }
+.detail-layout { display:grid;grid-template-columns:minmax(0,1.6fr) minmax(320px,.8fr);gap:14px;align-items:start; }
+.panel {
+  background:var(--bg1);
+  border:1px solid var(--border);
+  border-radius:8px;
+  padding:16px;
+  box-shadow:0 1px 3px rgba(0,0,0,.04);
+}
+.panel-title {
+  font-size:11px;
+  font-weight:800;
+  color:var(--text);
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  padding-bottom:10px;
+  border-bottom:1.5px solid var(--border);
+  margin-bottom:14px;
+}
+.signal-grid { display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px; }
+.signal-card { background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:13px;min-width:0; }
+.signal-label { font-size:10px;font-weight:800;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px; }
+.signal-value { font-size:15px;font-weight:800;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
+.human-review-card { border-color:#fecaca;background:#fffafa; }
+.review-list { margin:0;padding-left:18px;color:var(--text2);font-size:12px;line-height:1.8; }
+.review-state {
+  display:none;
+  margin-top:12px;
+  border:1px solid #bbf7d0;
+  background:#f0fdf4;
+  color:var(--ok);
+  border-radius:6px;
+  padding:10px 12px;
+  font-size:12px;
+  font-weight:700;
+}
+.meta-row { display:flex;justify-content:space-between;gap:10px;padding:9px 0;border-bottom:1px solid var(--border);font-size:12px; }
+.meta-row:last-child { border-bottom:0; }
+.meta-row span:first-child { color:var(--text3);font-weight:700;text-transform:uppercase;font-size:10px;letter-spacing:.08em; }
+.meta-row span:last-child { color:var(--text);font-weight:650;text-align:right;overflow-wrap:anywhere; }
+.raw-box { background:var(--bg2);border:1px solid var(--border);border-radius:8px;padding:14px;color:var(--text2);font-size:12px;line-height:1.8;white-space:pre-wrap;overflow-wrap:anywhere; }
+@media (max-width: 1050px) {
+  .detail-layout { grid-template-columns:1fr; }
+  .ticket-top { flex-direction:column; }
+  .action-stack { justify-content:flex-start; }
+}
+@media (max-width: 760px) {
+  .signal-grid { grid-template-columns:1fr; }
+  .ticket-title { font-size:20px; }
+}
+</style>
+</head>
+<body>
+<div id="topbar">
+  <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
+  <div class="center"><div class="page-title">Ticket Detail // Investigation</div></div>
+  <div class="right">
+    <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
+    <div id="utc-clock"></div>
+  </div>
+</div>
+<nav id="sidebar" aria-label="Primary navigation">
+  <div class="nav-section">OPERATIONS</div>
+  <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
+  <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
+  <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
+  <a class="nav-item" href="search.html"><span>Search</span></a>
+  <div class="nav-section">ANALYTICS</div>
+  <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
+  <div class="nav-section">DATA</div>
+  <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
+  <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
+  <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
+</nav>
+<main id="main">
+  <div class="ticket-shell">
+    <div id="ticket-error"></div>
+    <div id="ticket-body">
+      <div class="ticket-hero">
+        <div style="height:12px;width:180px;background:var(--bg3);border-radius:4px;animation:skeleton-pulse 1.2s infinite;margin-bottom:18px"></div>
+        <div style="height:28px;width:60%;background:var(--bg3);border-radius:6px;animation:skeleton-pulse 1.2s infinite;margin-bottom:12px"></div>
+        <div style="height:12px;width:80%;background:var(--bg3);border-radius:4px;animation:skeleton-pulse 1.2s infinite"></div>
+      </div>
+    </div>
+  </div>
+</main>
+<script src="shared.js?v=20260509-nav9"></script>
+<script>
+let currentTicket = null;
+
+function param(name) {
+  return new URLSearchParams(location.search).get(name);
+}
+
+function metricCard(label, value, tone = '') {
+  return `<div class="signal-card">
+    <div class="signal-label">${label}</div>
+    <div class="signal-value" style="${tone ? `color:${tone}` : ''}">${value || '—'}</div>
+  </div>`;
+}
+
+function renderReviewState(text) {
+  const el = document.getElementById('review-state');
+  if (!el) return;
+  el.textContent = text;
+  el.style.display = 'block';
+}
+
+function sendToHumanReview() {
+  if (!currentTicket) return;
+  addManualReview(currentTicket, 'Operator requested a second review from the ticket detail page.');
+  renderReviewState('Added to Human Review queue. Opening Human Review...');
+  setTimeout(() => {
+    location.href = `escalations.html?ticket=${encodeURIComponent(currentTicket.ticket_id || currentTicket.id)}`;
+  }, 450);
+}
+
+function renderTicket(raw) {
+  const t = normalizeTicketPayload(raw);
+  currentTicket = t;
+  const id = t.ticket_id || t.id || param('id');
+  const confTone = t.confidence_score == null ? 'var(--text3)' : t.confidence_score < .65 ? 'var(--critical)' : t.confidence_score < .85 ? 'var(--warn)' : 'var(--ok)';
+  const privacyTone = t.privacy_risk != null && t.privacy_risk > .15 ? 'var(--critical)' : 'var(--ok)';
+  const reviewReason = t.escalation_required
+    ? 'The backend already marked this ticket for human validation.'
+    : (t.confidence_score != null && t.confidence_score < .85)
+      ? 'Confidence is not strong enough for blind auto-resolution.'
+      : 'Use this when an operator wants extra validation before applying the fix.';
+  document.getElementById('ticket-body').innerHTML = `
+    <section class="ticket-hero">
+      <div class="ticket-top">
+        <div style="min-width:0">
+          <div class="ticket-id">${html(id)}</div>
+          <h1 class="ticket-title">${html(t.short_description || 'Ticket investigation')}</h1>
+          <div class="ticket-desc">${html(t.description || 'No long description is available for this ticket.')}</div>
+        </div>
+        <div class="action-stack">
+          <button class="btn btn-ghost" onclick="history.length > 1 ? history.back() : location.href='search.html'">Back</button>
+          <button class="btn btn-ghost" onclick="location.href='search.html?q=${encodeURIComponent(id)}'">Find In Search</button>
+          <button class="btn btn-primary" onclick="sendToHumanReview()">Human Review</button>
+        </div>
+      </div>
+    </section>
+
+    <div class="detail-layout">
+      <div style="display:flex;flex-direction:column;gap:14px">
+        <section class="panel">
+          <div class="panel-title">Decision Summary</div>
+          <div class="signal-grid">
+            ${metricCard('Category', html(t.assigned_category || t.category || '—'))}
+            ${metricCard('Owner Group', html(t.assignment_group || t.resolver_group || '—'))}
+            ${metricCard('Route Path', routePathBadge(t.route_path))}
+            ${metricCard('Confidence', t.confidence_score != null ? Math.round(t.confidence_score * 100) + '%' : '—', confTone)}
+            ${metricCard('SLA Risk', slaRiskBadge(t.sla_risk))}
+            ${metricCard('Privacy Risk', t.privacy_risk != null ? fmtNum(t.privacy_risk, 3) : '—', privacyTone)}
+          </div>
+        </section>
+
+        <section class="panel">
+          ${buildResolutionPlan(t)}
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">Original Ticket Description</div>
+          <div class="raw-box">${html(t.description || t.short_description || 'No description available.')}</div>
+        </section>
+
+        <section class="panel">
+          ${buildAuditDetails('Confidence And Evidence', `${buildConfidenceBreakdown(t)}${buildMatchedEvidence(t)}`, true)}
+          ${buildAuditDetails('Decision Trace', `${buildDecisionTrace(t)}${t.route_explanation ? `<div style="margin-top:14px;padding:12px;background:#eff6ff;border-left:3px solid var(--accent);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);line-height:1.7"><strong style="display:block;font-size:10px;color:var(--accent);letter-spacing:.08em;margin-bottom:4px">ROUTE EXPLANATION</strong>${t.route_explanation}</div>` : ''}`)}
+        </section>
+      </div>
+
+      <aside style="display:flex;flex-direction:column;gap:14px">
+        <section class="panel human-review-card">
+          <div class="panel-title">Human Review Action</div>
+          <p style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:12px">${html(reviewReason)}</p>
+          <ol class="review-list">
+            <li>Adds this ticket to the Human Review queue.</li>
+            <li>Preserves the AI decision, confidence, and route evidence.</li>
+            <li>Lets a reviewer approve, reject, or correct the category, group, and resolution.</li>
+            <li>Does not change backend routing logic by itself.</li>
+          </ol>
+          <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="sendToHumanReview()">Send To Human Review</button>
+          <div class="review-state" id="review-state"></div>
+        </section>
+
+        <section class="panel">
+          <div class="panel-title">Ticket Metadata</div>
+          <div class="meta-row"><span>Status</span><span>${html((t.status || 'routed').replace(/_/g, ' '))}</span></div>
+          <div class="meta-row"><span>Created</span><span>${fmtDate(t.created_at)}</span></div>
+          <div class="meta-row"><span>Matched Ticket</span><span>${html(t.matched_ticket_id || '—')}</span></div>
+          <div class="meta-row"><span>Retrieval</span><span>${fmtNum(t.retrieval_similarity, 3)}</span></div>
+          <div class="meta-row"><span>Verifier</span><span>${fmtNum(t.verifier_score, 3)}</span></div>
+          <div class="meta-row"><span>Redactions</span><span>${t.redacted_entities_count ?? '—'}</span></div>
+          <div class="meta-row"><span>Knowledge Gap</span><span>${html(t.knowledge_gap || 'none')}</span></div>
+        </section>
+      </aside>
+    </div>`;
+}
+
+async function loadTicket() {
+  initPage();
+  const id = param('id');
+  if (!id) {
+    showError('ticket-error', 'Ticket id is missing from the URL.');
+    return;
+  }
+  try {
+    const detail = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(id)}`);
+    renderTicket(detail);
+  } catch(e) {
+    showError('ticket-error', e.message, e.status);
+    document.getElementById('ticket-body').innerHTML = `
+      <div class="panel">
+        <div class="panel-title">Ticket Unavailable</div>
+        <p style="font-size:12px;color:var(--text2);line-height:1.7">The ticket could not be loaded from the backend. Try opening it from Search after the routing decision has been stored.</p>
+        <button class="btn btn-ghost" style="margin-top:12px" onclick="location.href='search.html'">Open Search</button>
+      </div>`;
+  }
+}
+
+loadTicket();
+</script>
+</body>
+</html>

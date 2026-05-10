@@ -21,6 +21,7 @@
 .queue-date { white-space:nowrap;font-size:10px;color:var(--text3); }
 .queue-route { margin-bottom:8px; }
 .queue-category { font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;margin-bottom:5px; }
+.queue-note { font-size:10px;color:var(--critical);font-weight:700;margin-bottom:6px; }
 .bar-row { margin-bottom:11px; }
 .bar-label { display:flex;justify-content:space-between;font-size:11px;margin-bottom:4px; }
 .bar-track { height:6px;background:var(--bg3);border-radius:999px;overflow:hidden; }
@@ -112,7 +113,10 @@ async function loadEscalations() {
   showSkeleton('queue-skel', 5);
   try {
     const res = await apiFetch('/v1/escalations');
-    allEsc = res.escalations || [];
+    const backendEsc = res.escalations || [];
+    const backendIds = new Set(backendEsc.map(t => t.ticket_id || t.id));
+    const manualEsc = getManualReviewQueue().filter(t => !backendIds.has(t.ticket_id || t.id));
+    allEsc = [...manualEsc, ...backendEsc];
     document.getElementById('queue-count').textContent = `${allEsc.length} ticket${allEsc.length!==1?'s':''}`;
     const list = document.getElementById('queue-list');
     list.innerHTML = '';
@@ -126,6 +130,7 @@ async function loadEscalations() {
           <span class="queue-date">${fmtDate(t.created_at)}</span>
         </div>
         <div class="queue-route">${routePathBadge(t.route_path)}</div>
+        ${t.manual_review_requested ? '<div class="queue-note">Manual review requested from ticket detail</div>' : ''}
         <div class="queue-category">${html(t.assigned_category || 'Escalated routing decision')}</div>
         <div style="display:flex;gap:8px;font-family:var(--mono);font-size:10px;color:var(--text3)">
           <span>conf <strong style="color:${(t.confidence_score||0)<.65?'var(--critical)':'var(--text)'}">${t.confidence_score!=null?Math.round(t.confidence_score*100)+'%':'—'}</strong></span>
@@ -133,6 +138,10 @@ async function loadEscalations() {
         </div>
       </div>`;
     }).join('');
+    const target = new URLSearchParams(location.search).get('ticket');
+    if (target && allEsc.some(t => (t.ticket_id || t.id) === target)) {
+      setTimeout(() => selectTicket(target), 50);
+    }
   } catch(e) {
     showError('esc-error', e.message, e.status);
     clearContainer('queue-skel');
@@ -161,7 +170,9 @@ async function selectTicket(id) {
         <span style="font-size:15px;font-weight:700;color:var(--text)">${id}</span>
         ${routePathBadge(t.route_path)}
         ${statusBadge(t.status||'human_review_required')}
+        <button class="btn btn-ghost" style="font-size:10px;padding:4px 10px;margin-left:auto" onclick="openTicketDetail('${id}')">Open Detail</button>
       </div>
+      ${selected.manual_review_requested ? `<div style="margin-bottom:12px;border:1px solid #fecaca;background:#fff5f5;color:var(--critical);border-radius:6px;padding:10px 12px;font-size:11px;font-weight:700">${html(selected.manual_review_reason || 'Manual review requested from ticket detail page.')}</div>` : ''}
       ${selected.detail_error ? `<div style="margin-bottom:12px;font-size:11px;color:var(--warn)">Full detail unavailable: ${html(selected.detail_error)}</div>` : ''}
       ${buildDetailContent(t)}
     </div>`;
@@ -214,6 +225,7 @@ async function submitReview(id, action) {
     const qi = document.getElementById('qi-'+id);
     if(qi) { qi.style.transition='opacity .3s,max-height .4s'; qi.style.opacity='0'; qi.style.maxHeight='0'; qi.style.overflow='hidden'; setTimeout(()=>qi.remove(),400); }
     allEsc = allEsc.filter(t=>(t.ticket_id||t.id)!==id);
+    removeManualReview(id);
     setTimeout(()=>{ document.getElementById('queue-count').textContent=`${allEsc.length} tickets`; },400);
     document.getElementById('evidence-col').innerHTML=`<div class="solved-banner anim-fade" style="border-radius:8px;display:inline-flex">✓ ${action.charAt(0).toUpperCase()+action.slice(1)} submitted for ${id}</div>`;
     document.getElementById('action-col').innerHTML='';
