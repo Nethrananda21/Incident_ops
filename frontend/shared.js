@@ -242,7 +242,7 @@ function routePathBadge(path) {
   const B={semantic_cache:'#f0fdf4',generative_rag:'#eff6ff',out_of_distribution:'#fffbeb',human_review_required:'#fff5f5',manual_review_requested:'#fff5f5'};
   const c=C[path]||'var(--text3)';
   const label=String(path).replace(/_/g,' ');
-  return `<span class="route-path-badge" title="${html(label)}" style="font-family:var(--mono);font-size:9px;font-weight:600;letter-spacing:.06em;color:${c};border:1px solid ${c};border-radius:3px;padding:2px 7px;background:${B[path]||'var(--bg2)'}">${html(label)}</span>`;
+  return `<span class="route-path-badge" title="${html(label)}" style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:${c};border:1px solid ${c};border-radius:3px;padding:2px 7px;background:${B[path]||'var(--bg2)'}">${html(label)}</span>`;
 }
 
 function ticketDetailUrl(ticketId) {

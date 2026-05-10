@@ -40,7 +40,7 @@
       flex-wrap: wrap;
       gap: 10px;
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text3);
     }
 
@@ -79,7 +79,7 @@
 
     .recent-ticket-head span {
       font-family: var(--mono);
-      font-size: 9px;
+      font-size: 10px;
       color: var(--text3);
       letter-spacing: 0.1em;
       min-width: 0;
@@ -279,11 +279,11 @@
           const confColor = t.confidence_score == null ? 'var(--text3)' : t.confidence_score < .65 ? 'var(--critical)' : t.confidence_score < .85 ? 'var(--warn)' : 'var(--ok)';
           return `
       <div class="recent-ticket-row" onclick="openTicketDetail('${t.ticket_id || t.id}')">
-        <span style="font-family:var(--mono);font-size:11px;font-weight:600;color:var(--text)" title="${html(id || '')}">${id || '—'}</span>
-        <span style="font-size:11px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description || '')}">${html(t.short_description || '—')}</span>
-        <span style="font-size:10px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
+        <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)" title="${html(id || '')}">${id || '—'}</span>
+        <span style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description || '')}">${html(t.short_description || '—')}</span>
+        <span style="font-size:11px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
         ${routePathBadge(t.route_path)}
-        <span style="font-family:var(--mono);font-size:10px;font-weight:700;color:${confColor}">${conf}</span>
+        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${confColor}">${conf}</span>
         ${slaRiskBadge(t.sla_risk)}
       </div>`;
         }).join('');
