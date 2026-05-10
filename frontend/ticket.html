@@ -51,6 +51,24 @@
 .signal-value { font-size:15px;font-weight:800;color:var(--text);min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .human-review-card { border-color:#fecaca;background:#fffafa; }
 .review-list { margin:0;padding-left:18px;color:var(--text2);font-size:12px;line-height:1.8; }
+.review-form { display:none;margin-top:14px;border-top:1px solid #fecaca;padding-top:14px; }
+.review-form.open { display:block; }
+.review-choice-grid { display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px; }
+.review-choice {
+  border:1.5px solid var(--border2);
+  background:#fff;
+  color:var(--text2);
+  border-radius:6px;
+  padding:10px;
+  cursor:pointer;
+  font-size:12px;
+  font-weight:800;
+  text-align:center;
+}
+.review-choice.active.approve { border-color:var(--ok);color:var(--ok);background:#f0fdf4; }
+.review-choice.active.reject { border-color:var(--critical);color:var(--critical);background:#fff5f5; }
+.review-hint { font-size:11px;color:var(--text3);line-height:1.6;margin-bottom:10px; }
+.review-inline-error { display:none;margin-top:10px;color:var(--critical);font-size:12px;font-weight:700; }
 .review-state {
   display:none;
   margin-top:12px;
@@ -115,6 +133,7 @@
 <script src="shared.js?v=20260509-nav9"></script>
 <script>
 let currentTicket = null;
+let selectedReviewDecision = 'approve';
 
 function param(name) {
   return new URLSearchParams(location.search).get(name);
@@ -134,13 +153,60 @@ function renderReviewState(text) {
   el.style.display = 'block';
 }
 
-function sendToHumanReview() {
+function openHumanReviewPanel() {
   if (!currentTicket) return;
   addManualReview(currentTicket, 'Operator requested a second review from the ticket detail page.');
-  renderReviewState('Added to Human Review queue. Opening Human Review...');
-  setTimeout(() => {
-    location.href = `escalations.html?ticket=${encodeURIComponent(currentTicket.ticket_id || currentTicket.id)}`;
-  }, 450);
+  const form = document.getElementById('inline-review-form');
+  form?.classList.add('open');
+  document.getElementById('review-reason')?.focus();
+  document.getElementById('review-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  renderReviewState('Added to the Human Review queue. Complete the decision below.');
+}
+
+function setReviewDecision(decision) {
+  selectedReviewDecision = decision;
+  document.querySelectorAll('.review-choice').forEach(btn => btn.classList.remove('active'));
+  document.getElementById(`choice-${decision}`)?.classList.add('active');
+  const correction = document.getElementById('reject-correction-fields');
+  if (correction) correction.style.display = decision === 'reject' ? 'block' : 'none';
+}
+
+async function submitInlineReview() {
+  if (!currentTicket) return;
+  const id = currentTicket.ticket_id || currentTicket.id || param('id');
+  const reasonEl = document.getElementById('review-reason');
+  const err = document.getElementById('review-inline-error');
+  const reason = reasonEl?.value.trim() || '';
+  if (!reason) {
+    if (err) {
+      err.textContent = 'Reason is required before submitting the review.';
+      err.style.display = 'block';
+    }
+    reasonEl?.focus();
+    return;
+  }
+  if (err) err.style.display = 'none';
+  const payload = {
+    ticket_id: id,
+    decision: selectedReviewDecision === 'approve' ? 'approve' : 'reject',
+    reviewer: getReviewerName(),
+    notes: reason,
+    corrected_category: document.getElementById('review-category')?.value || undefined,
+    corrected_assignment_group: document.getElementById('review-group')?.value || undefined,
+    corrected_resolution: document.getElementById('review-resolution')?.value || undefined,
+  };
+  const btn = document.getElementById('submit-inline-review');
+  if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
+  addManualReview(currentTicket, `${selectedReviewDecision === 'approve' ? 'Approved' : 'Disapproved'} from ticket detail: ${reason}`);
+  try {
+    await apiFetch('/v1/review/escalations', { method: 'POST', body: JSON.stringify(payload) });
+    removeManualReview(id);
+    renderReviewState(`${selectedReviewDecision === 'approve' ? 'Approval' : 'Disapproval'} submitted to Human Review.`);
+  } catch(e) {
+    renderReviewState(`Saved on this page and added to Human Review queue. Backend review submit was unavailable: ${e.message}`);
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = 'Submit Review Decision'; }
+  }
 }
 
 function renderTicket(raw) {
@@ -165,7 +231,7 @@ function renderTicket(raw) {
         <div class="action-stack">
           <button class="btn btn-ghost" onclick="history.length > 1 ? history.back() : location.href='search.html'">Back</button>
           <button class="btn btn-ghost" onclick="location.href='search.html?q=${encodeURIComponent(id)}'">Find In Search</button>
-          <button class="btn btn-primary" onclick="sendToHumanReview()">Human Review</button>
+          <button class="btn btn-primary" onclick="openHumanReviewPanel()">Human Review</button>
         </div>
       </div>
     </section>
@@ -200,7 +266,7 @@ function renderTicket(raw) {
       </div>
 
       <aside style="display:flex;flex-direction:column;gap:14px">
-        <section class="panel human-review-card">
+        <section class="panel human-review-card" id="review-panel">
           <div class="panel-title">Human Review Action</div>
           <p style="font-size:12px;color:var(--text2);line-height:1.7;margin-bottom:12px">${html(reviewReason)}</p>
           <ol class="review-list">
@@ -209,7 +275,26 @@ function renderTicket(raw) {
             <li>Lets a reviewer approve, reject, or correct the category, group, and resolution.</li>
             <li>Does not change backend routing logic by itself.</li>
           </ol>
-          <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="sendToHumanReview()">Send To Human Review</button>
+          <button class="btn btn-primary" style="width:100%;margin-top:14px" onclick="openHumanReviewPanel()">Start Review On This Page</button>
+          <div class="review-form" id="inline-review-form">
+            <div class="review-hint">Choose the reviewer decision and write why. This keeps the operator on the ticket page.</div>
+            <div class="review-choice-grid">
+              <button class="review-choice approve active" id="choice-approve" onclick="setReviewDecision('approve')">Accept AI Decision</button>
+              <button class="review-choice reject" id="choice-reject" onclick="setReviewDecision('reject')">Disapprove</button>
+            </div>
+            <label style="margin-top:0">REASON</label>
+            <textarea id="review-reason" rows="4" placeholder="Explain why this decision is accepted or disapproved..."></textarea>
+            <div id="reject-correction-fields" style="display:none">
+              <label>CORRECT CATEGORY</label>
+              <input id="review-category" placeholder="Optional corrected category">
+              <label>CORRECT OWNER GROUP</label>
+              <input id="review-group" placeholder="Optional corrected owner group">
+              <label>CORRECT RESOLUTION</label>
+              <textarea id="review-resolution" rows="3" placeholder="Optional corrected resolution"></textarea>
+            </div>
+            <button class="btn btn-primary" id="submit-inline-review" style="width:100%;margin-top:12px" onclick="submitInlineReview()">Submit Review Decision</button>
+            <div class="review-inline-error" id="review-inline-error"></div>
+          </div>
           <div class="review-state" id="review-state"></div>
         </section>
 
