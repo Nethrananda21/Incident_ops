@@ -321,6 +321,29 @@
     .recent-table th:nth-child(6), .recent-table td:nth-child(6) { width: 70px; }
     .recent-table th:nth-child(7), .recent-table td:nth-child(7) { width: 80px; }
     .recent-table th:nth-child(8), .recent-table td:nth-child(8) { width: 90px; }
+    .recent-table th,
+    .recent-table td {
+      overflow: hidden;
+    }
+    .recent-table td:nth-child(1) .linkish {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+    }
+    .recent-table td:nth-child(4) .route-pill {
+      display: block;
+      width: 100%;
+      box-sizing: border-box;
+      text-align: center;
+    }
+    .recent-table td:nth-child(5),
+    .recent-table td:nth-child(6),
+    .recent-table td:nth-child(7),
+    .recent-table td:nth-child(8) {
+      white-space: nowrap;
+    }
 
     @media (max-width: 1180px) {
       .stats-grid, .stats-grid.has-pii { grid-template-columns: repeat(2, minmax(0, 1fr)); }

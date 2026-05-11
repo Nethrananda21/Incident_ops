@@ -201,7 +201,7 @@ function buildRow(t) {
     <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${t.urgency||'—'}</span>
     <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">${t.impact||'—'}</span>
     ${statusBadge(t.status||'unrouted')}
-    <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${fmtDate(t.streamed_at||t.created_at)}</span>
+    <span style="font-family:var(--mono);font-size:9px;color:var(--text3)">${fmtDate(t.created_at || t.streamed_at)}</span>
   </div>`;
 }
 

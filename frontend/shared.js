@@ -223,7 +223,14 @@ function normalizeTicketPayload(payload = {}) {
 function fmtNum(v, d=2)  { if(v==null) return '—'; return typeof v==='number'?v.toFixed(d):v; }
 function fmtDate(val)    {
   if(!val) return '—';
-  try { const d=new Date(val); return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}); }
+  try {
+    const raw = typeof val === 'string' ? val.trim() : val;
+    const d = typeof raw === 'number'
+      ? new Date(raw < 10000000000 ? raw * 1000 : raw)
+      : new Date(String(raw).replace(' ', 'T'));
+    if (Number.isNaN(d.getTime())) return String(val);
+    return d.toLocaleDateString('en-GB',{day:'2-digit',month:'short'})+' '+d.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});
+  }
   catch { return String(val); }
 }
 function countUp(id, target, suffix='', dur=700) {
