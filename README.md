@@ -74,17 +74,17 @@ The frontend is available at:
 
 Pages:
 
-- **Dashboard**: live ticket totals, routing decisions, privacy findings, category load, assignment groups, and recent tickets.
+- **Dashboard**: LLM-backed ticket totals, routing decisions, privacy findings, route distribution, backend readiness, and recent tickets.
 - **Intelligence**: routing quality, SLA risk queue, knowledge-gap clusters, resolver capacity, human feedback loop, and governance controls.
 - **Ticket Stream**: server-sent event feed of live backend tickets from ClickHouse.
 - **Search**: full ticket search with category, source, status, route, urgency, and impact filters; rows open full ticket details.
 - **Routing Desk**: submit or stage a ticket, run classification/RAG/resolution/verification, and inspect the agent decision.
-- **Escalations**: human-review queue for uncertain routing decisions.
+- **Human Review**: backend-only escalation queue for uncertain routing decisions and reviewer approve/reject/correction actions.
 - **Privacy Audit**: recent redaction findings with entity type, placeholder, confidence, policy, and detector version.
 - **Knowledge Base**: sanitized RAG corpus from the Hugging Face dataset and routed API tickets.
-- **Evaluation**: live quality signals such as routed count, average confidence, retrieval similarity, verifier score, escalation rate, and latency.
+- **Ticket Detail**: full-page ticket investigation view with route outcome, evidence, resolution plan, metadata, and inline review submission.
 
-No ticket rows in the UI are hardcoded. Pages call the running backend APIs.
+No ticket rows or dashboard readings in the UI are hardcoded. Pages call the running backend APIs. The Human Review page reads only `/v1/escalations`; it does not keep a browser-local fake queue.
 
 ## Dataset
 
@@ -267,7 +267,6 @@ Important routes:
 | `GET` | `/v1/privacy/audit/recent` | Recent redaction findings |
 | `GET` | `/v1/privacy/audit/{stream_id}` | Audit trail for one stream |
 | `GET` | `/v1/knowledge` | Sanitized RAG corpus |
-| `GET` | `/v1/evaluation` | Live evaluation metrics |
 | `POST` | `/v1/review/escalations` | Persist reviewer decision, correction, or override feedback |
 | `GET` | `/v1/review/events` | Review feedback history and correction-rate metrics |
 
@@ -275,7 +274,7 @@ Routing responses include the deterministic routing branch:
 
 ```json
 {
-  "route_path": "semantic_cache | generative_rag | out_of_distribution",
+  "route_path": "semantic_cache | generative_rag | out_of_distribution | human_review_required",
   "semantic_cache_hit": true,
   "matched_ticket_id": "INC00491",
   "routing_latency_ms": 56,
@@ -302,8 +301,8 @@ Go privacy service:
 
 ### 1. Prepare environment
 
-```powershell
-Copy-Item .env.example .env
+```bash
+cp .env.example .env
 ```
 
 Edit `.env` and set:
@@ -314,41 +313,72 @@ NVIDIA_API_KEY=your_key_here
 
 ### 2. Start Docker stack
 
-```powershell
+```bash
 docker compose up -d --build
 ```
 
-### 3. Seed the ServiceNow-style dataset
+### 3. Optional: start with an empty demo database
 
-```powershell
+For a clean demo, leave ClickHouse empty. The dashboard, search, stream, knowledge base, privacy audit, and human-review pages should all show zero or empty states until real tickets are routed.
+
+To reset local demo data:
+
+```bash
+docker compose exec clickhouse clickhouse-client \
+  --password clickhouse \
+  --database incident_ai \
+  --multiquery \
+  --query "TRUNCATE TABLE tickets; TRUNCATE TABLE routing_decisions; TRUNCATE TABLE privacy_audit; TRUNCATE TABLE review_events;"
+```
+
+Then restart the API/UI:
+
+```bash
+docker compose restart api-gateway review-ui
+```
+
+### 4. Optional: seed the ServiceNow-style dataset
+
+Only seed data when you want a populated RAG demo. Seeded rows will appear in the frontend because the UI is API-backed.
+
+```bash
 docker compose run --rm api-gateway python -m app.scripts.seed_hf_dataset --limit 500
 ```
 
-### 4. Open the frontend
+### 5. Open the frontend
 
 [http://localhost:8081](http://localhost:8081)
 
-### 5. Check API health
+### 6. Check API health
 
-```powershell
-Invoke-RestMethod -Uri http://localhost:8000/v1/health
+```bash
+curl -s http://localhost:8000/v1/health
+```
+
+Expected when the NVIDIA key is configured:
+
+```json
+{
+  "status": "ok",
+  "clickhouse": true,
+  "nvidia_configured": true,
+  "model": "meta/llama-3.3-70b-instruct"
+}
 ```
 
 ## Sample Ticket Routing Call
 
-```powershell
-$body = @{
-  short_description = "VPN login fails for multiple users"
-  description = "Users report MFA succeeds but the VPN tunnel never establishes from office network 10.0.4.15. Contact jane@example.com saw password=TempPass123 in a pasted diagnostic."
-  urgency = 2
-  impact = 2
-} | ConvertTo-Json
-
-Invoke-RestMethod `
-  -Method Post `
-  -Uri http://localhost:8000/v1/tickets/route `
-  -ContentType "application/json" `
-  -Body $body
+```bash
+curl -s -X POST http://localhost:8000/v1/tickets/route \
+  -H "Content-Type: application/json" \
+  -d '{
+    "ticket_id": "DEMO-VPN-001",
+    "short_description": "VPN login fails for multiple users",
+    "description": "Users report MFA succeeds but the VPN tunnel never establishes from office network 10.0.4.15. Contact jane@example.com saw password=TempPass123 in a pasted diagnostic.",
+    "urgency": 2,
+    "impact": 2,
+    "source": "demo"
+  }'
 ```
 
 Expected behavior:
@@ -362,42 +392,44 @@ Expected behavior:
 - Confidence components are returned.
 - Ticket escalates if confidence is low.
 
+After the call, refresh the frontend. The new ticket should appear across Dashboard, Ticket Stream, Search, Knowledge Base, Privacy Audit if redactions occurred, and Human Review if the backend marked it for escalation.
+
 ## Development Commands
 
 Build services:
 
-```powershell
+```bash
 docker compose build
 ```
 
 Restart API and UI:
 
-```powershell
+```bash
 docker compose up -d api-gateway review-ui
 ```
 
 View logs:
 
-```powershell
+```bash
 docker compose logs -f api-gateway
 docker compose logs -f privacy-shield
 ```
 
 Run Go tests inside Docker:
 
-```powershell
-docker run --rm -v "${PWD}\services\privacy-shield:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
+```bash
+docker run --rm -v "$PWD/services/privacy-shield:/src" -w /src golang:1.23-alpine sh -c "go test ./..."
 ```
 
 Compile Python app:
 
-```powershell
-python -m compileall services\agent-api\app
+```bash
+python -m compileall services/agent-api/app
 ```
 
 Query ClickHouse:
 
-```powershell
+```bash
 docker compose exec -T clickhouse clickhouse-client --password clickhouse --query "SELECT count() FROM incident_ai.tickets"
 ```
 
@@ -411,14 +443,14 @@ The repo includes a deterministic 100-ticket benchmark generator for new merchan
 
 Generate the benchmark:
 
-```powershell
-python services\agent-api\app\scripts\generate_eval_ticket_set.py --output data\eval_ticket_set_100.json
+```bash
+python services/agent-api/app/scripts/generate_eval_ticket_set.py --output data/eval_ticket_set_100.json
 ```
 
 Evaluate the live backend:
 
-```powershell
-python services\agent-api\app\scripts\evaluate_ticket_set.py --input data\eval_ticket_set_100.json --output output\evaluation\full_100_ticket_results.json
+```bash
+python services/agent-api/app/scripts/evaluate_ticket_set.py --input data/eval_ticket_set_100.json --output output/evaluation/full_100_ticket_results.json
 ```
 
 The evaluator posts each ticket to `/v1/tickets/route` and compares the backend decision against the expected `auto_resolution` or `human_review` label. The latest local Docker run scored `100/100` decision accuracy: 40/40 easy, 20/20 medium, and 40/40 hard.
@@ -430,6 +462,18 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 +-- DESIGN.md
 +-- README.md
 +-- docker-compose.yml
++-- frontend/
+|   +-- dashboard.html
+|   +-- stream.html
+|   +-- routing.html
+|   +-- search.html
+|   +-- ticket.html
+|   +-- intelligence.html
+|   +-- knowledge.html
+|   +-- privacy.html
+|   +-- escalations.html
+|   +-- shared.css
+|   +-- shared.js
 +-- infra/
 |   +-- clickhouse/init/001_schema.sql
 |   +-- prometheus/prometheus.yml
@@ -451,7 +495,6 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
     |   +-- cmd/privacy-shield/main.go
     |   +-- Dockerfile
     +-- review-ui/
-        +-- index.html
         +-- nginx.conf
         +-- Dockerfile
 ```
@@ -459,14 +502,15 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 ## Demo Flow
 
 1. Open [http://localhost:8081](http://localhost:8081).
-2. Start on **Dashboard** to show live ticket volume, category load, privacy findings, and routing decisions.
-3. Open **Ticket Stream** to show tickets streaming from the live backend.
-4. Stage a streamed ticket into **Routing Desk**.
-5. Route it and explain the agent nodes: privacy, retrieval, triage, generation, verifier, escalation.
-6. Open **Privacy Audit** to show redaction evidence.
-7. Open **Knowledge Base** to show sanitized historical incidents used for RAG.
-8. Open **Intelligence** to show SLA risk, route-quality trends, resolver saturation, knowledge gaps, and feedback-loop governance.
-9. Open **Evaluation** to show measurable confidence/retrieval/escalation signals.
+2. Start on **Dashboard**. With a clean database, every reading should be zero and the recent-ticket table should be empty.
+3. Submit a ticket from **Routing Desk** or call `POST /v1/tickets/route`.
+4. Explain the agent nodes: privacy, retrieval, triage, generation, verifier, and escalation.
+5. Open **Ticket Stream** to show the new backend ticket.
+6. Open **Search** and click the ticket to inspect the full detail page.
+7. Open **Privacy Audit** to show redaction evidence when the ticket contains sensitive values.
+8. Open **Knowledge Base** to show sanitized routed tickets used as retrieval corpus.
+9. Open **Human Review** only when a backend route returns `human_review_required`.
+10. Open **Intelligence** to show SLA risk, route-quality trends, resolver saturation, knowledge gaps, and feedback-loop governance after enough tickets are routed.
 
 ## Current Limitations
 
