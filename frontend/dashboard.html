@@ -103,6 +103,42 @@
       text-overflow: ellipsis;
       white-space: nowrap;
     }
+
+    .llm-required-panel {
+      background: var(--bg1);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,.05);
+      margin-bottom: 12px;
+    }
+
+    .llm-required-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: var(--text);
+      margin-bottom: 8px;
+      letter-spacing: -.01em;
+    }
+
+    .llm-required-copy {
+      font-size: 13px;
+      color: var(--text2);
+      line-height: 1.7;
+      max-width: 760px;
+    }
+
+    .llm-required-code {
+      margin-top: 14px;
+      display: inline-block;
+      font-family: var(--mono);
+      font-size: 11px;
+      color: var(--critical);
+      background: #fff5f5;
+      border: 1px solid #fecaca;
+      border-radius: 6px;
+      padding: 7px 10px;
+    }
   </style>
 </head>
 
@@ -135,12 +171,20 @@
   <main id="main">
     <div class="page-header">
       <h1>Dashboard // NOC Overview</h1>
-      <p>Live snapshot from <span style="font-family:var(--mono);color:var(--accent)">GET /v1/dashboard</span></p>
+      <p>LLM-backed routing overview from <span style="font-family:var(--mono);color:var(--accent)">GET /v1/dashboard</span></p>
     </div>
     <div id="dash-error"></div>
+    <div id="llm-required" class="llm-required-panel">
+      <div class="llm-required-title">NVIDIA LLM is not configured</div>
+      <div class="llm-required-copy">
+        Dashboard readings are hidden because the backend is currently using fallback routing instead of live NVIDIA LLM generation and verification.
+        Add a real API key, restart the backend, and this page will show only API-backed classified ticket data.
+      </div>
+      <div class="llm-required-code">NVIDIA_API_KEY is empty</div>
+    </div>
 
     <!-- BACKEND HEALTH -->
-    <details class="card mb-1" style="padding:0">
+    <details class="card mb-1 requires-llm-data" data-display="block" style="padding:0;display:none">
       <summary
         style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none">
         <div class="card-title" style="margin:0">Backend Readiness</div>
@@ -153,7 +197,7 @@
     </details>
 
     <!-- KPI ROW -->
-    <div class="kpi-grid mb-1" style="grid-template-columns:repeat(5,1fr)">
+    <div class="kpi-grid mb-1 requires-llm-data" data-display="grid" style="grid-template-columns:repeat(5,1fr);display:none">
       <div class="kpi-card">
         <div class="kpi-label">TOTAL TICKETS</div>
         <div class="kpi-num" id="k-total">—</div>
@@ -179,7 +223,7 @@
     </div>
 
     <!-- ROUTE DISTRIBUTION -->
-    <div class="card mb-1">
+    <div class="card mb-1 requires-llm-data" data-display="block" style="display:none">
         <div class="card-title">ROUTE PATH DISTRIBUTION</div>
         <div class="route-dist-bar" id="route-bar">
           <div style="width:0%;background:var(--ok)" id="rb-cache"></div>
@@ -198,7 +242,7 @@
     </div>
 
     <!-- RECENT TICKETS -->
-    <div class="card" style="padding:0;overflow-x:auto">
+    <div class="card requires-llm-data" data-display="block" style="padding:0;overflow-x:auto;display:none">
       <div
         style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
         <div class="card-title" style="margin:0">RECENT TICKETS</div>
@@ -232,9 +276,24 @@
   <script>
     const ROUTE_PATHS = ['semantic_cache', 'generative_rag', 'out_of_distribution', 'human_review_required'];
 
+    function setDashboardReadingsVisible(visible) {
+      document.getElementById('llm-required').style.display = visible ? 'none' : '';
+      document.querySelectorAll('.requires-llm-data').forEach(el => {
+        el.style.display = visible ? (el.dataset.display || 'block') : 'none';
+      });
+    }
+
     async function loadDashboard() {
-      showSkeleton('recent-skel', 8);
       try {
+        const health = await apiFetch('/v1/health');
+        if (!health.nvidia_configured) {
+          setDashboardReadingsVisible(false);
+          clearContainer('dash-error');
+          return;
+        }
+        setDashboardReadingsVisible(true);
+        renderHealthPanel('health-panel');
+        showSkeleton('recent-skel', 8);
         const d = await apiFetch('/v1/dashboard');
         const recent = await apiFetch('/v1/tickets/search?limit=8').catch(() => ({ tickets: d.recent_tickets || [] }));
         const routing = d.routing || {};
@@ -288,13 +347,13 @@
       </div>`;
         }).join('');
       } catch (e) {
+        setDashboardReadingsVisible(false);
         showError('dash-error', e.message, e.status || '');
-        document.getElementById('recent-skel').innerHTML = '';
+        if (document.getElementById('recent-skel')) document.getElementById('recent-skel').innerHTML = '';
       }
     }
 
     initPage();
-    renderHealthPanel('health-panel');
     loadDashboard();
     startAutoRefresh(loadDashboard, 20);
   </script>
