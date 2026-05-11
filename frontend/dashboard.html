@@ -7,137 +7,324 @@
   <title>INCIDENT_OPS // DASHBOARD</title>
   <link rel="stylesheet" href="shared.css?v=20260509-nav9">
   <style>
-    .kpi-num {
-      font-family: var(--mono);
-      font-size: 30px;
-      font-weight: 700;
-      color: var(--text);
-      line-height: 1;
+    :root {
+      --route-cache: #1D9E75;
+      --route-rag: #378ADD;
+      --route-ood: #BA7517;
+      --route-human: #E24B4A;
+      --noc-bg: #f3f4f6;
     }
 
-    .kpi-num.warn {
-      color: var(--warn);
-    }
-
-    .kpi-num.ok {
-      color: var(--ok);
-    }
-
-    .route-dist-bar {
-      display: flex;
-      height: 12px;
-      border-radius: 2px;
-      overflow: hidden;
-      margin: 10px 0 6px;
-    }
-
-    .route-dist-bar div {
-      transition: width .6s ease;
-    }
-
-    .route-legend {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 10px;
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text3);
-    }
-
-    .route-legend span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .route-legend b {
-      width: 8px;
-      height: 8px;
-      border-radius: 1px;
-      display: inline-block;
-    }
-
-    .recent-ticket-head,
-    .recent-ticket-row {
-      display: grid;
-      grid-template-columns:
-        minmax(180px, .95fr)
-        minmax(280px, 2fr)
-        minmax(130px, .75fr)
-        minmax(150px, .78fr)
-        minmax(88px, .45fr)
-        minmax(78px, .4fr);
-      gap: 14px;
-      align-items: center;
-      min-width: 980px;
-    }
-
-    .recent-ticket-head {
-      padding: 8px 16px;
-      border-bottom: 1px solid var(--border);
-    }
-
-    .recent-ticket-head span {
-      font-family: var(--mono);
-      font-size: 10px;
-      color: var(--text3);
-      letter-spacing: 0.1em;
+    body { background: var(--noc-bg); }
+    #main { padding: 24px; }
+    .page-header { margin-bottom: 12px; }
+    .page-header h1 { font-size: 21px; margin-bottom: 8px; }
+    .page-header p { font-size: 13px; }
+    .noc-stack { display: flex; flex-direction: column; gap: 20px; }
+    .noc-row { display: grid; gap: 12px; }
+    .two-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); position: relative; }
+    .stats-grid.has-pii { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .noc-card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 10px;
+      padding: 16px;
+      box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
       min-width: 0;
     }
+    .noc-title {
+      font-size: 13px;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #0f172a;
+      margin-bottom: 14px;
+    }
+    .muted { color: #6b7280; }
+    .mono { font-family: var(--mono); }
+    .inline-error { font-size: 12px; color: var(--route-human); margin-top: 8px; }
+    .empty-copy { font-size: 13px; color: #6b7280; line-height: 1.5; }
 
-    .recent-ticket-row {
-      padding: 10px 16px;
-      border-bottom: 1px solid var(--border);
+    .refresh-ring {
+      width: 24px;
+      height: 24px;
+      border: 0;
+      background: transparent;
+      padding: 0;
       cursor: pointer;
-      transition: background .12s;
+      color: #2563eb;
+    }
+    .refresh-ring svg { width: 24px; height: 24px; transform: rotate(-90deg); }
+    .refresh-ring circle {
+      fill: none;
+      stroke-width: 3;
+      stroke-linecap: round;
+    }
+    .refresh-ring .track { stroke: #e5e7eb; }
+    .refresh-ring .progress {
+      stroke: currentColor;
+      stroke-dasharray: 63;
+      stroke-dashoffset: 63;
+      animation: ring-fill 30s linear infinite;
+    }
+    .refresh-ring.reset .progress { animation: none; }
+    @keyframes ring-fill { from { stroke-dashoffset: 63; } to { stroke-dashoffset: 0; } }
+
+    .quick-route {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      max-width: 900px;
+    }
+    .quick-route input {
+      height: 38px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      padding: 0 12px;
+      font-size: 13px;
+      background: #fff;
+      color: #0f172a;
+    }
+    .quick-route button {
+      height: 38px;
+      border: 0;
+      border-radius: 8px;
+      padding: 0 16px;
+      font-size: 13px;
+      font-weight: 700;
+      color: #fff;
+      background: #2563eb;
+      cursor: pointer;
+    }
+    .quick-route button:disabled { opacity: .7; cursor: wait; }
+    .quick-result { grid-column: 1 / -1; font-size: 12px; min-height: 18px; }
+    .quick-result.ok { color: var(--route-cache); }
+    .quick-result.err { color: var(--route-human); }
+
+    .status-bar {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+    .status-pill2 {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 7px 10px;
+      border-radius: 999px;
+      border: 1px solid #bbf7d0;
+      background: #f0fdf4;
+      font-size: 12px;
+      color: #14532d;
+    }
+    .status-pill2.bad { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
+    .status-dot2 { width: 7px; height: 7px; border-radius: 999px; background: var(--route-cache); flex: 0 0 auto; }
+    .status-pill2.bad .status-dot2 { background: var(--route-human); }
+    .recheck-btn {
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      background: #fff;
+      color: #374151;
+      padding: 7px 10px;
+      font-size: 12px;
+      font-weight: 700;
+      cursor: pointer;
+      margin-left: auto;
     }
 
-    .recent-ticket-row:hover {
-      background: var(--bg2);
+    .warning-banner {
+      display: none;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      background: #fffbeb;
+      border: 1px solid #fde68a;
+      border-radius: 10px;
+      padding: 12px 14px;
+      color: #92400e;
+      font-size: 13px;
+    }
+    .warning-banner.show { display: flex; }
+    .warning-banner button {
+      border: 0;
+      background: transparent;
+      color: #92400e;
+      font-size: 18px;
+      cursor: pointer;
     }
 
-    .recent-ticket-row > span,
-    .recent-ticket-row > div {
+    .stat-card { position: relative; min-height: 154px; }
+    .stat-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      color: #6b7280;
+      font-weight: 700;
+      margin-bottom: 8px;
+    }
+    .stat-value {
+      font-size: 24px;
+      font-weight: 500;
+      color: #0f172a;
+      line-height: 1.05;
+      margin-bottom: 10px;
+    }
+    .stat-sub { font-size: 12px; color: #6b7280; margin-top: 7px; min-height: 18px; }
+    .sparkline { display: flex; gap: 4px; height: 28px; align-items: flex-end; margin-top: 8px; }
+    .sparkline span { width: 10px; min-height: 3px; border-radius: 3px 3px 0 0; background: #378ADD; opacity: .9; }
+    .trend { font-size: 12px; margin-top: 7px; color: #6b7280; }
+    .trend.up { color: var(--route-cache); }
+    .trend.down { color: var(--route-human); }
+    .progress-thin { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin: 3px 0 6px; }
+    .progress-thin span { display: block; height: 100%; border-radius: inherit; background: var(--route-cache); }
+    .refresh-dot {
+      display: none;
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #2563eb;
+      animation: dot-pulse .9s ease-in-out infinite;
+    }
+    .stats-grid.refreshing .refresh-dot { display: block; }
+    @keyframes dot-pulse { 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1.15)} }
+
+    .route-canvas-wrap { height: 150px; }
+    canvas { display: block; width: 100%; }
+    .category-row, .latency-row, .confidence-row {
+      display: grid;
+      grid-template-columns: 110px minmax(0, 1fr) 54px;
+      gap: 10px;
+      align-items: center;
+      margin-bottom: 10px;
+      font-size: 12px;
+    }
+    .category-row .label, .latency-row .label {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
+      color: #374151;
     }
+    .bar-track { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
+    .bar-fill { display: block; height: 100%; border-radius: 999px; background: #378ADD; }
+    .bar-num { text-align: right; font-size: 11px; color: #374151; }
 
-    .llm-required-panel {
-      background: var(--bg1);
-      border: 1px solid var(--border);
-      border-radius: 8px;
-      padding: 24px;
-      box-shadow: 0 1px 3px rgba(0,0,0,.05);
-      margin-bottom: 12px;
-    }
-
-    .llm-required-title {
-      font-size: 15px;
-      font-weight: 800;
-      color: var(--text);
-      margin-bottom: 8px;
-      letter-spacing: -.01em;
-    }
-
-    .llm-required-copy {
+    .trace-row {
+      display: grid;
+      grid-template-columns: 10px minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: center;
+      padding: 8px 0;
+      border-bottom: 1px solid #f3f4f6;
       font-size: 13px;
-      color: var(--text2);
-      line-height: 1.7;
-      max-width: 760px;
+    }
+    .trace-row:last-child { border-bottom: 0; }
+    .trace-dot { width: 8px; height: 8px; border-radius: 999px; }
+    .trace-outcome { color: #6b7280; font-size: 12px; text-align: right; }
+    .trace-meta { margin-top: 12px; font-size: 12px; color: #6b7280; }
+    .formula { margin-top: 10px; font-size: 11px; color: #6b7280; line-height: 1.55; }
+    .overall-score { margin-top: 8px; font-size: 22px; font-weight: 700; }
+
+    .heatmap-wrap {
+      display: grid;
+      grid-template-columns: 34px repeat(7, 18px);
+      gap: 8px;
+      align-items: center;
+      width: max-content;
+    }
+    .heat-label { font-size: 10px; color: #6b7280; text-align: right; }
+    .heat-cell { width: 16px; height: 16px; border-radius: 4px; background: rgba(55, 138, 221, .08); }
+    .heat-day { font-size: 10px; color: #6b7280; text-align: center; }
+    .heat-note { margin-top: 10px; font-size: 10px; color: #6b7280; font-style: italic; }
+
+    .table-card { padding: 0; overflow: hidden; }
+    .table-top {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      padding: 14px 16px;
+    }
+    .count-badge {
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      background: #f3f4f6;
+      color: #374151;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 3px 8px;
+      margin-left: 8px;
+    }
+    .table-scroll { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+    th {
+      position: sticky;
+      top: 0;
+      z-index: 1;
+      background: #fff;
+      color: #6b7280;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+      text-align: left;
+      padding: 10px 12px;
+      border-top: 1px solid #e5e7eb;
+      border-bottom: 1px solid #e5e7eb;
+    }
+    td {
+      padding: 10px 12px;
+      border-bottom: 1px solid #e5e7eb;
+      font-size: 13px;
+      color: #374151;
+      vertical-align: middle;
+    }
+    tr { transition: background-color 1.5s ease; }
+    tr.flash { background: #fef3c7; }
+    .linkish { color: #2563eb; text-decoration: none; font-weight: 700; }
+    .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .route-pill {
+      display: inline-block;
+      max-width: 100%;
+      border: 1px solid currentColor;
+      border-radius: 5px;
+      padding: 3px 7px;
+      font-family: var(--mono);
+      font-size: 10px;
+      font-weight: 700;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .review-btn {
+      display: inline-block;
+      border: 1px solid #d1d5db;
+      border-radius: 7px;
+      padding: 5px 9px;
+      color: #374151;
+      text-decoration: none;
+      font-size: 12px;
+      font-weight: 700;
+      background: #fff;
     }
 
-    .llm-required-code {
-      margin-top: 14px;
-      display: inline-block;
-      font-family: var(--mono);
-      font-size: 11px;
-      color: var(--critical);
-      background: #fff5f5;
-      border: 1px solid #fecaca;
-      border-radius: 6px;
-      padding: 7px 10px;
+    .recent-table th:nth-child(1), .recent-table td:nth-child(1) { width: 120px; }
+    .recent-table th:nth-child(3), .recent-table td:nth-child(3) { width: 100px; }
+    .recent-table th:nth-child(4), .recent-table td:nth-child(4) { width: 110px; }
+    .recent-table th:nth-child(5), .recent-table td:nth-child(5) { width: 80px; }
+    .recent-table th:nth-child(6), .recent-table td:nth-child(6) { width: 70px; }
+    .recent-table th:nth-child(7), .recent-table td:nth-child(7) { width: 80px; }
+    .recent-table th:nth-child(8), .recent-table td:nth-child(8) { width: 90px; }
+
+    @media (max-width: 1180px) {
+      .stats-grid, .stats-grid.has-pii { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .two-col { grid-template-columns: 1fr; }
     }
   </style>
 </head>
@@ -150,11 +337,18 @@
     </div>
     <div class="right">
       <div id="status-pill">
-        <div class="dot"></div><span>LIVE</span>
+        <div class="dot"></div><span>STATUS_OK</span>
       </div>
+      <button class="refresh-ring" id="refresh-ring" title="Refresh dashboard now" aria-label="Refresh dashboard now">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle class="track" cx="12" cy="12" r="10"></circle>
+          <circle class="progress" cx="12" cy="12" r="10"></circle>
+        </svg>
+      </button>
       <div id="utc-clock"></div>
     </div>
   </div>
+
   <nav id="sidebar" aria-label="Primary navigation">
     <div class="nav-section">OPERATIONS</div>
     <a class="nav-item active" href="dashboard.html"><span>Dashboard</span></a>
@@ -168,194 +362,724 @@
     <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
     <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
   </nav>
+
   <main id="main">
     <div class="page-header">
       <h1>Dashboard // NOC Overview</h1>
-      <p>LLM-backed routing overview from <span style="font-family:var(--mono);color:var(--accent)">GET /v1/dashboard</span></p>
-    </div>
-    <div id="dash-error"></div>
-    <div id="llm-required" class="llm-required-panel">
-      <div class="llm-required-title">NVIDIA LLM is not configured</div>
-      <div class="llm-required-copy">
-        Dashboard readings are hidden because the backend is currently using fallback routing instead of live NVIDIA LLM generation and verification.
-        Add a real API key, restart the backend, and this page will show only API-backed classified ticket data.
-      </div>
-      <div class="llm-required-code">NVIDIA_API_KEY is empty</div>
+      <p>Live operating picture from <span class="mono" style="color:var(--accent)">GET /v1/dashboard</span></p>
     </div>
 
-    <!-- BACKEND HEALTH -->
-    <details class="card mb-1 requires-llm-data" data-display="block" style="padding:0;display:none">
-      <summary
-        style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:pointer;list-style:none">
-        <div class="card-title" style="margin:0">Backend Readiness</div>
-        <button class="btn btn-ghost" style="font-size:11px;padding:4px 10px"
-          onclick="event.preventDefault();event.stopPropagation();renderHealthPanel('health-panel')">↺ Recheck</button>
-      </summary>
-      <div style="padding:16px" id="health-panel">
-        <div style="font-size:12px;color:var(--text3);animation:skeleton-pulse 1.2s infinite">Checking backend…</div>
-      </div>
-    </details>
+    <form class="quick-route" id="quick-route-form">
+      <input id="quick-ticket-text" autocomplete="off" placeholder="Paste a ticket description...">
+      <button id="quick-route-btn" type="submit">▶ Route it</button>
+      <div id="quick-route-result" class="quick-result"></div>
+    </form>
 
-    <!-- KPI ROW -->
-    <div class="kpi-grid mb-1 requires-llm-data" data-display="grid" style="grid-template-columns:repeat(5,1fr);display:none">
-      <div class="kpi-card">
-        <div class="kpi-label">TOTAL TICKETS</div>
-        <div class="kpi-num" id="k-total">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">ESCALATIONS</div>
-        <div class="kpi-num warn" id="k-esc">—</div>
-        <div class="kpi-sub" id="k-esc-rate">—% escalation rate</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">AVG CONFIDENCE</div>
-        <div class="kpi-num" id="k-conf">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">CACHE HIT RATE</div>
-        <div class="kpi-num ok" id="k-cache">—</div>
-      </div>
-      <div class="kpi-card">
-        <div class="kpi-label">AVG LATENCY</div>
-        <div class="kpi-num" id="k-lat">—</div>
-        <div class="kpi-sub">ms</div>
-      </div>
-    </div>
+    <div class="noc-stack">
+      <section class="status-bar" id="backend-status-bar">
+        <span class="status-pill2"><span class="status-dot2"></span><strong>API</strong> <span>checking</span></span>
+        <button class="recheck-btn" id="recheck-health">Recheck</button>
+      </section>
 
-    <!-- ROUTE DISTRIBUTION -->
-    <div class="card mb-1 requires-llm-data" data-display="block" style="display:none">
-        <div class="card-title">ROUTE PATH DISTRIBUTION</div>
-        <div class="route-dist-bar" id="route-bar">
-          <div style="width:0%;background:var(--ok)" id="rb-cache"></div>
-          <div style="width:0%;background:var(--accent)" id="rb-rag"></div>
-          <div style="width:0%;background:var(--warn)" id="rb-ood"></div>
-          <div style="width:0%;background:var(--critical)" id="rb-hr"></div>
+      <div class="warning-banner" id="health-warning">
+        <span id="health-warning-text"></span>
+        <button type="button" id="dismiss-warning" aria-label="Dismiss warning">×</button>
+      </div>
+
+      <section class="noc-row stats-grid" id="stats-grid">
+        <span class="refresh-dot"></span>
+        <div class="noc-card stat-card" id="stat-total"></div>
+        <div class="noc-card stat-card" id="stat-confidence"></div>
+        <div class="noc-card stat-card" id="stat-cache"></div>
+        <div class="noc-card stat-card" id="stat-escalations"></div>
+        <div class="noc-card stat-card" id="stat-latency"></div>
+        <a class="noc-card stat-card" id="stat-pii" href="privacy.html" style="display:none;text-decoration:none"></a>
+      </section>
+
+      <section class="noc-row two-col">
+        <div class="noc-card">
+          <div class="noc-title">How tickets are routed</div>
+          <div class="route-canvas-wrap"><canvas id="route-chart" height="150"></canvas></div>
+          <div id="route-chart-error"></div>
         </div>
-        <div class="route-legend">
-          <span><b style="background:var(--ok)"></b>semantic cache <span id="rl-cache">—</span></span>
-          <span><b style="background:var(--accent)"></b>generative rag <span id="rl-rag">—</span></span>
-          <span><b style="background:var(--warn)"></b>out of dist. <span id="rl-ood">—</span></span>
-          <span><b style="background:var(--critical)"></b>human review <span id="rl-hr">—</span></span>
+        <div class="noc-card">
+          <div class="noc-title">Ticket load by category</div>
+          <div id="category-load"></div>
         </div>
-        <div id="route-count-detail" style="margin-top:8px;font-family:var(--mono);font-size:9px;color:var(--text3)">
-        </div>
-    </div>
+      </section>
 
-    <!-- RECENT TICKETS -->
-    <div class="card requires-llm-data" data-display="block" style="padding:0;overflow-x:auto;display:none">
-      <div
-        style="display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border)">
-        <div class="card-title" style="margin:0">RECENT TICKETS</div>
-        <a href="search.html"
-          style="font-family:var(--mono);font-size:9px;color:var(--accent);text-decoration:none;letter-spacing:0.08em">VIEW
-          ALL →</a>
-      </div>
-      <div class="recent-ticket-head">
-        <span>TICKET</span>
-        <span>DESCRIPTION</span>
-        <span>CATEGORY</span>
-        <span>ROUTE PATH</span>
-        <span>CONFIDENCE</span>
-        <span>SLA RISK</span>
-      </div>
-      <div id="recent-tickets-body">
-        <div id="recent-skel"></div>
-      </div>
+      <section class="noc-row two-col">
+        <div class="noc-card">
+          <div class="noc-title">Last AI decision — step by step</div>
+          <div id="last-trace"></div>
+        </div>
+        <div class="noc-card">
+          <div class="noc-title">Confidence score explained</div>
+          <div id="confidence-breakdown"></div>
+        </div>
+      </section>
+
+      <section class="noc-row two-col">
+        <div class="noc-card">
+          <div class="noc-title">Ticket activity — last 7 days</div>
+          <div id="activity-heatmap"></div>
+        </div>
+        <div class="noc-card">
+          <div class="noc-title">Response time by route</div>
+          <div id="latency-by-route"></div>
+        </div>
+      </section>
+
+      <section class="noc-card table-card">
+        <div class="table-top">
+          <div class="noc-title" style="margin:0">Tickets that need attention <span class="count-badge" id="risk-count">0 escalations</span></div>
+        </div>
+        <div id="risk-table"></div>
+      </section>
+
+      <section class="noc-card table-card">
+        <div class="table-top">
+          <div class="noc-title" style="margin:0">Recent tickets</div>
+          <a class="linkish" href="search.html" style="font-size:12px">View all →</a>
+        </div>
+        <div class="table-scroll">
+          <table class="recent-table">
+            <thead>
+              <tr>
+                <th>Ticket ID</th>
+                <th>Description</th>
+                <th>Category</th>
+                <th>Route</th>
+                <th>Confidence</th>
+                <th>SLA risk</th>
+                <th>Redacted PII</th>
+                <th>Time</th>
+              </tr>
+            </thead>
+            <tbody id="recent-body">
+              <tr><td colspan="8" class="empty-copy">No recent tickets.</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
     </div>
   </main>
-  <div class="modal-overlay" id="ticket-modal">
-    <div class="modal-box">
-      <div class="modal-header">
-        <div class="modal-title" id="modal-ticket-id">TICKET //</div>
-        <button class="modal-close" onclick="closeModal()">✕</button>
-      </div>
-      <div id="modal-content"></div>
-    </div>
-  </div>
+
   <script src="shared.js?v=20260509-nav9"></script>
   <script>
-    const ROUTE_PATHS = ['semantic_cache', 'generative_rag', 'out_of_distribution', 'human_review_required'];
+    const ROUTES = [
+      { key: 'semantic_cache', label: 'Semantic cache', short: 'Cache hit', color: '#1D9E75' },
+      { key: 'generative_rag', label: 'Generative RAG', short: 'AI-generated', color: '#378ADD' },
+      { key: 'out_of_distribution', label: 'Out of range', short: 'Out of range', color: '#BA7517' },
+      { key: 'human_review_required', alt: 'human_review', label: 'Human review', short: 'Human review', color: '#E24B4A' },
+    ];
+    const intervals = [];
+    let latestHealth = null;
+    let latestDashboard = null;
+    let latestDetail = null;
+    let recentIds = new Set();
+    let stream = null;
 
-    function setDashboardReadingsVisible(visible) {
-      document.getElementById('llm-required').style.display = visible ? 'none' : '';
-      document.querySelectorAll('.requires-llm-data').forEach(el => {
-        el.style.display = visible ? (el.dataset.display || 'block') : 'none';
-      });
+    const pct = v => Math.round(Number(v || 0) * 100);
+    const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+    const safeNum = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+    const fmtPct = v => `${Math.round(safeNum(v) * 100)}%`;
+    const confidenceColor = percent => percent >= 70 ? '#1D9E75' : percent >= 50 ? '#BA7517' : '#E24B4A';
+    const riskTextColor = level => level === 'critical' ? '#E24B4A' : level === 'elevated' ? '#BA7517' : '#374151';
+    const routeMeta = route => ROUTES.find(r => r.key === route || r.alt === route) || { label: route || 'Unrouted', short: route || 'Unrouted', color: '#6b7280' };
+    const detailUrl = id => `ticket.html?id=${encodeURIComponent(id)}`;
+    const privacyUrl = id => `privacy.html?ticket=${encodeURIComponent(id)}`;
+
+    function setTimer(fn, ms) {
+      const id = setInterval(fn, ms);
+      intervals.push(id);
+      return id;
     }
 
-    async function loadDashboard() {
+    function formatDuration(seconds) {
+      const s = Math.max(0, Math.round(safeNum(seconds)));
+      const h = Math.floor(s / 3600);
+      const m = Math.floor((s % 3600) / 60);
+      if (h) return `${h}h ${m}m`;
+      if (m) return `${m}m`;
+      return `${s}s`;
+    }
+
+    function formatLatency(ms) {
+      const n = safeNum(ms);
+      if (!n) return '—';
+      return n >= 1000 ? `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)} s` : `${Math.round(n)} ms`;
+    }
+
+    function relativeTime(value) {
+      const ts = Date.parse(value);
+      if (!Number.isFinite(ts)) return '—';
+      const diff = Math.max(0, Date.now() - ts);
+      const min = Math.floor(diff / 60000);
+      if (min < 1) return 'just now';
+      if (min < 60) return `${min} min ago`;
+      const h = Math.floor(min / 60);
+      if (h < 24) return `${h} h ago`;
+      return `${Math.floor(h / 24)} d ago`;
+    }
+
+    function routePill(route) {
+      const m = routeMeta(route);
+      return `<span class="route-pill" style="color:${m.color};background:${m.color}12" title="${html(m.label)}">${html(m.label)}</span>`;
+    }
+
+    function spark(field, value) {
+      const key = `dash_spark_${field}`;
+      let arr = [];
+      try { arr = JSON.parse(sessionStorage.getItem(key) || '[]'); } catch {}
+      if (!arr.length) arr = Array(7).fill(safeNum(value));
+      arr.push(safeNum(value));
+      arr = arr.slice(-7);
+      sessionStorage.setItem(key, JSON.stringify(arr));
+      return arr;
+    }
+
+    function sparkHtml(values, color) {
+      const max = Math.max(...values.map(safeNum), 1);
+      return `<div class="sparkline">${values.map(v => `<span style="height:${clamp(safeNum(v) / max * 28, 3, 28)}px;background:${color}"></span>`).join('')}</div>`;
+    }
+
+    function trendHtml(values, formatter = v => Math.round(v)) {
+      const last = safeNum(values.at(-1));
+      const prev = safeNum(values.at(-2));
+      const delta = last - prev;
+      if (values.length < 2 || Math.abs(delta) < .0001) return '<div class="trend">No change since last refresh</div>';
+      const cls = delta >= 0 ? 'up' : 'down';
+      return `<div class="trend ${cls}">${delta >= 0 ? '↑' : '↓'} ${html(formatter(Math.abs(delta)))} since last refresh</div>`;
+    }
+
+    function statCard({ label, value, color, sparkValues, trend, sub, progress }) {
+      return `
+        <div class="stat-label">${html(label)}</div>
+        <div class="stat-value" style="color:${color || '#0f172a'}">${html(value)}</div>
+        ${progress != null ? `<div class="progress-thin"><span style="width:${clamp(progress, 0, 100)}%;background:${color}"></span></div>` : ''}
+        ${sparkValues ? sparkHtml(sparkValues, color || '#378ADD') : ''}
+        ${sub ? `<div class="stat-sub">${sub}</div>` : ''}
+        ${trend || ''}
+      `;
+    }
+
+    function normalizeDashboard(d) {
+      const routing = d.routing || {};
+      const routeObj = d.route_distribution || Object.fromEntries((routing.route_paths || []).map(r => [r.name, r.count]));
+      const decisions = safeNum(routing.decisions || d.routing_decisions_total);
+      const total = safeNum(d.total_tickets ?? d.tickets_total);
+      const escalations = safeNum(d.escalation_count ?? routing.escalations);
+      const cacheHits = safeNum(routing.semantic_cache_hits);
+      return {
+        raw: d,
+        total,
+        avgConfidence: safeNum(d.avg_confidence ?? routing.avg_confidence),
+        cacheHitRate: safeNum(d.cache_hit_rate ?? (decisions ? cacheHits / decisions : 0)),
+        escalations,
+        avgLatency: safeNum(d.avg_latency_ms ?? routing.avg_latency_ms),
+        routeDistribution: {
+          semantic_cache: safeNum(routeObj.semantic_cache),
+          generative_rag: safeNum(routeObj.generative_rag),
+          out_of_distribution: safeNum(routeObj.out_of_distribution),
+          human_review_required: safeNum(routeObj.human_review_required ?? routeObj.human_review),
+        },
+        categories: d.category_distribution || d.categories || [],
+        routeLatency: d.route_latency_ms || {},
+        components: d.avg_confidence_components || null,
+        privacyCount: safeNum(d.privacy_findings_count ?? d.privacy_findings_total),
+        entityTypes: d.top_entity_types || (d.privacy_by_type || []).slice(0, 2).map(x => x.entity_type),
+        decisions,
+      };
+    }
+
+    async function fetchHealth() {
       try {
-        const health = await apiFetch('/v1/health');
-        if (!health.nvidia_configured) {
-          setDashboardReadingsVisible(false);
-          clearContainer('dash-error');
-          return;
-        }
-        setDashboardReadingsVisible(true);
-        renderHealthPanel('health-panel');
-        showSkeleton('recent-skel', 8);
-        const d = await apiFetch('/v1/dashboard');
-        const recent = await apiFetch('/v1/tickets/search?limit=8').catch(() => ({ tickets: d.recent_tickets || [] }));
-        const routing = d.routing || {};
-        const decisions = routing.decisions || routing.routing_decisions_total || d.routing_decisions_total || 0;
-
-        // KPIs
-        countUp('k-total', d.tickets_total || 0, '', 600);
-        countUp('k-esc', routing.escalations || 0, '', 600);
-        document.getElementById('k-esc-rate').textContent =
-          decisions ? ((routing.escalations || 0) / decisions * 100).toFixed(1) + '% escalation rate' : '—% escalation rate';
-        if (routing.avg_confidence != null) countUp('k-conf', Number((routing.avg_confidence * 100).toFixed(1)), '%', 600);
-        else document.getElementById('k-conf').textContent = '—';
-        if (decisions) countUp('k-cache', Number(((routing.semantic_cache_hits || 0) / decisions * 100).toFixed(1)), '%', 600);
-        else document.getElementById('k-cache').textContent = '—';
-        document.getElementById('k-lat').textContent =
-          routing.avg_latency_ms != null ? Math.round(routing.avg_latency_ms) : '—';
-        // Route distribution
-        const dist = Object.fromEntries((routing.route_paths || []).map(r => [r.name, r.count]));
-        const total = Object.values(dist).reduce((a, b) => a + b, 0) || 1;
-        const ids = ['cache', 'rag', 'ood', 'hr'];
-        const keys = ROUTE_PATHS;
-        keys.forEach((k, i) => {
-          const v = dist[k] || 0;
-          const pct = (v / total * 100).toFixed(1);
-          const bar = document.getElementById('rb-' + ids[i]);
-          if (bar) bar.style.width = pct + '%';
-          const lbl = document.getElementById('rl-' + ids[i]);
-          if (lbl) lbl.textContent = `(${v})`;
-        });
-
-        // Recent tickets
-        const tickets = recent.tickets || d.recent_tickets || [];
-        const body = document.getElementById('recent-tickets-body');
-        if (!tickets.length) {
-          body.innerHTML = '<div class="empty-state">// No recent tickets</div>';
-          return;
-        }
-        body.innerHTML = tickets.map(raw => {
-          const t = normalizeTicketPayload(raw);
-          const id = t.ticket_id || t.id;
-          const conf = t.confidence_score != null ? Math.round(t.confidence_score * 100) + '%' : '—';
-          const confColor = t.confidence_score == null ? 'var(--text3)' : t.confidence_score < .65 ? 'var(--critical)' : t.confidence_score < .85 ? 'var(--warn)' : 'var(--ok)';
-          return `
-      <div class="recent-ticket-row" onclick="openTicketDetail('${t.ticket_id || t.id}')">
-        <span style="font-family:var(--mono);font-size:12px;font-weight:600;color:var(--text)" title="${html(id || '')}">${id || '—'}</span>
-        <span style="font-size:12px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${html(t.short_description || '')}">${html(t.short_description || '—')}</span>
-        <span style="font-size:11px;color:var(--text2)">${html(t.assigned_category || t.category || '—')}</span>
-        ${routePathBadge(t.route_path)}
-        <span style="font-family:var(--mono);font-size:11px;font-weight:700;color:${confColor}">${conf}</span>
-        ${slaRiskBadge(t.sla_risk)}
-      </div>`;
-        }).join('');
-      } catch (e) {
-        setDashboardReadingsVisible(false);
-        showError('dash-error', e.message, e.status || '');
-        if (document.getElementById('recent-skel')) document.getElementById('recent-skel').innerHTML = '';
+        latestHealth = await apiFetch('/v1/health');
+        renderHealth(latestHealth);
+        renderWarnings();
+      } catch(e) {
+        console.error(e);
+        renderHealth({ status: 'error', clickhouse: false, nvidia_configured: false, model: '—', uptime_seconds: 0 });
       }
     }
 
+    function renderHealth(h) {
+      const apiOk = h.status === 'ok' || h.status === 'degraded';
+      const dbOk = !!h.clickhouse;
+      const aiOk = !!h.nvidia_configured;
+      const model = h.model || '—';
+      const uptime = formatDuration(h.uptime ?? h.uptime_seconds);
+      const pill = (label, value, ok = true) => `<span class="status-pill2 ${ok ? '' : 'bad'}"><span class="status-dot2"></span><strong>${html(label)}</strong> <span>${html(value)}</span></span>`;
+      document.getElementById('backend-status-bar').innerHTML = `
+        ${pill('API', apiOk ? 'ok' : 'error', apiOk)}
+        ${pill('Database', dbOk ? 'connected' : 'disconnected', dbOk)}
+        ${pill('AI model', aiOk ? 'configured' : 'missing key', aiOk)}
+        ${pill('Model name', model, aiOk)}
+        ${pill('Uptime', uptime, apiOk)}
+        <button class="recheck-btn" id="recheck-health">Recheck</button>
+      `;
+      document.getElementById('recheck-health')?.addEventListener('click', fetchHealth);
+    }
+
+    function renderWarnings() {
+      const d = latestDashboard ? normalizeDashboard(latestDashboard) : null;
+      const messages = [];
+      if (latestHealth && !latestHealth.clickhouse) messages.push('Database is disconnected. Routing decisions may not be saving.');
+      if (latestHealth && !latestHealth.nvidia_configured) messages.push('AI model key is not set. AI-generated resolutions are disabled.');
+      if (d && d.total > 0 && d.escalations / d.total > 0.20) messages.push('Escalation rate is above 20%. Check the Intelligence page for knowledge gaps.');
+      const banner = document.getElementById('health-warning');
+      const text = document.getElementById('health-warning-text');
+      const active = messages[0] || '';
+      const key = `dismissed_warning_${active}`;
+      if (active && sessionStorage.getItem(key) !== '1') {
+        text.textContent = active;
+        banner.dataset.dismissKey = key;
+        banner.classList.add('show');
+      } else {
+        banner.classList.remove('show');
+      }
+    }
+
+    function renderStats(d) {
+      const totalSpark = d.raw.sparklines?.total_tickets || spark('total', d.total);
+      const confSpark = d.raw.sparklines?.avg_confidence || spark('confidence', pct(d.avgConfidence));
+      const cacheSpark = d.raw.sparklines?.cache_hit_rate || spark('cache', pct(d.cacheHitRate));
+      const escSpark = d.raw.sparklines?.escalation_count || spark('escalations', d.escalations);
+      const latSpark = d.raw.sparklines?.avg_latency_ms || spark('latency', d.avgLatency);
+      const confPct = pct(d.avgConfidence);
+      const cachePct = pct(d.cacheHitRate);
+      const latencyColor = d.avgLatency < 500 ? '#1D9E75' : d.avgLatency <= 2000 ? '#BA7517' : '#E24B4A';
+      const escRate = d.total ? d.escalations / d.total * 100 : 0;
+      document.getElementById('stat-total').innerHTML = statCard({
+        label: 'Total tickets',
+        value: d.total.toLocaleString(),
+        color: '#378ADD',
+        sparkValues: totalSpark,
+        trend: trendHtml(totalSpark, v => Math.round(v).toLocaleString()),
+      });
+      document.getElementById('stat-confidence').innerHTML = statCard({
+        label: 'Avg confidence',
+        value: `${confPct}%`,
+        color: confidenceColor(confPct),
+        progress: confPct,
+        sparkValues: confSpark,
+        trend: trendHtml(confSpark, v => `${Math.round(v)} pts`),
+      });
+      document.getElementById('stat-cache').innerHTML = statCard({
+        label: 'Cache hits',
+        value: `${cachePct}%`,
+        color: cachePct >= 30 ? '#1D9E75' : '#378ADD',
+        sparkValues: cacheSpark,
+        sub: `LLM calls saved: ${Math.round(d.total * d.cacheHitRate).toLocaleString()}`,
+        trend: trendHtml(cacheSpark, v => `${Math.round(v)} pts`),
+      });
+      document.getElementById('stat-escalations').innerHTML = statCard({
+        label: 'Escalations',
+        value: d.escalations.toLocaleString(),
+        color: d.escalations > 10 ? '#E24B4A' : d.escalations > 0 ? '#BA7517' : '#1D9E75',
+        sparkValues: escSpark,
+        sub: `Escalation rate: ${escRate.toFixed(1)}%`,
+        trend: trendHtml(escSpark, v => Math.round(v).toLocaleString()),
+      });
+      document.getElementById('stat-latency').innerHTML = statCard({
+        label: 'Avg response time',
+        value: formatLatency(d.avgLatency),
+        color: latencyColor,
+        sparkValues: latSpark,
+        trend: trendHtml(latSpark, v => formatLatency(v)),
+      });
+      const pii = document.getElementById('stat-pii');
+      if (d.privacyCount > 0) {
+        document.getElementById('stats-grid').classList.add('has-pii');
+        pii.style.display = '';
+        pii.innerHTML = statCard({
+          label: 'PII found today',
+          value: d.privacyCount.toLocaleString(),
+          color: '#E24B4A',
+          sparkValues: spark('privacy', d.privacyCount),
+          sub: `Types: ${d.entityTypes.slice(0, 2).join(', ') || '—'}`,
+        });
+      } else {
+        document.getElementById('stats-grid').classList.remove('has-pii');
+        pii.style.display = 'none';
+      }
+    }
+
+    function drawRouteChart(d) {
+      const canvas = document.getElementById('route-chart');
+      const rect = canvas.parentElement.getBoundingClientRect();
+      const scale = window.devicePixelRatio || 1;
+      canvas.width = Math.max(360, rect.width) * scale;
+      canvas.height = 150 * scale;
+      canvas.style.height = '150px';
+      const ctx = canvas.getContext('2d');
+      ctx.scale(scale, scale);
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const data = ROUTES.map(r => ({ ...r, value: d.routeDistribution[r.key] || 0 }));
+      const max = Math.max(...data.map(x => x.value), 1);
+      const w = rect.width || 360;
+      const gap = 24;
+      const barW = Math.max(34, (w - gap * (data.length + 1)) / data.length);
+      ctx.font = '12px Inter, sans-serif';
+      ctx.textAlign = 'center';
+      data.forEach((item, i) => {
+        const x = gap + i * (barW + gap);
+        const h = item.value ? Math.max(8, item.value / max * 82) : 4;
+        const y = 100 - h;
+        ctx.fillStyle = '#0f172a';
+        ctx.fillText(String(item.value), x + barW / 2, y - 8);
+        ctx.fillStyle = item.color;
+        ctx.beginPath();
+        ctx.roundRect(x, y, barW, h, 5);
+        ctx.fill();
+        ctx.fillStyle = '#374151';
+        ctx.font = '11px Inter, sans-serif';
+        ctx.fillText(item.short, x + barW / 2, 126);
+      });
+    }
+
+    function renderCategories(d) {
+      const rows = [...d.categories].sort((a, b) => safeNum(b.count) - safeNum(a.count)).slice(0, 8);
+      const max = Math.max(...rows.map(r => safeNum(r.count)), 1);
+      const total = d.total || rows.reduce((a, b) => a + safeNum(b.count), 0);
+      if (!rows.length) {
+        document.getElementById('category-load').innerHTML = '<div class="empty-copy">No category load yet.</div>';
+        return;
+      }
+      const more = d.categories.length > 8 ? `<div class="muted" style="font-size:11px;margin-top:6px">...and ${d.categories.length - 8} more</div>` : '';
+      document.getElementById('category-load').innerHTML = rows.map(r => {
+        const count = safeNum(r.count);
+        return `<div class="category-row">
+          <div class="label" title="${html(r.name)}">${html(r.name)}</div>
+          <div class="bar-track"><span class="bar-fill" style="width:${count / max * 100}%"></span></div>
+          <div class="bar-num">${count} · ${total ? Math.round(count / total * 100) : 0}%</div>
+        </div>`;
+      }).join('') + more;
+    }
+
+    async function fetchLastTrace() {
+      try {
+        const recent = await apiFetch('/v1/tickets/recent?limit=1');
+        const item = recent.tickets?.[0];
+        if (!item) {
+          latestDetail = null;
+          renderTrace(null);
+          renderConfidence(normalizeDashboard(latestDashboard || {}), null);
+          return;
+        }
+        latestDetail = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(item.ticket_id)}`);
+        renderTrace(latestDetail);
+        renderConfidence(normalizeDashboard(latestDashboard || {}), latestDetail);
+      } catch(e) {
+        console.error(e);
+        document.getElementById('last-trace').innerHTML = '<div class="inline-error">Could not load — retrying in 30 s</div>';
+      }
+    }
+
+    function renderTrace(detail) {
+      if (!detail?.routing) {
+        document.getElementById('last-trace').innerHTML = '<div class="empty-copy">No tickets routed yet. Submit one from Routing Desk to see the trace here.</div>';
+        return;
+      }
+      const r = detail.routing;
+      const rows = [];
+      rows.push(['#1D9E75', 'Privacy check', `${detail.privacy_audit?.length || r.redacted_entities_count || 0} redactions`]);
+      if (r.confidence_components?.retrieval_similarity != null || r.retrieval_similarity != null) rows.push(['#378ADD', 'Similar ticket search', `${Math.round(safeNum(r.confidence_components?.retrieval_similarity ?? r.retrieval_similarity) * 100)}% match`]);
+      if (r.route_path === 'semantic_cache') rows.push(['#1D9E75', 'Cache match found', r.matched_ticket_id || 'matched']);
+      if (r.route_path === 'generative_rag') rows.push(['#378ADD', 'AI wrote a resolution', 'generated']);
+      if (r.route_path === 'out_of_distribution') rows.push(['#BA7517', 'No match — escalating', 'out of range']);
+      if (r.confidence_components?.verifier_score != null || r.verifier_score != null) rows.push(['#7c3aed', 'Answer quality check', `${Math.round(safeNum(r.confidence_components?.verifier_score ?? r.verifier_score) * 100)}%`]);
+      rows.push([r.escalation_required ? '#E24B4A' : '#1D9E75', r.escalation_required ? 'Sent to human review' : 'Auto-resolved', r.escalation_required ? 'needs review' : 'complete']);
+      document.getElementById('last-trace').innerHTML = rows.map(row => `
+        <div class="trace-row"><span class="trace-dot" style="background:${row[0]}"></span><div>${html(row[1])}</div><div class="trace-outcome">${html(row[2])}</div></div>
+      `).join('') + `<div class="trace-meta">Ticket: <a class="linkish" href="${detailUrl(r.ticket_id)}">${html(r.ticket_id)}</a> · Routed in ${safeNum(r.latency_ms ?? r.routing_latency_ms)} ms · ${html(routeMeta(r.route_path).label)}</div>`;
+    }
+
+    function renderConfidence(d, detail) {
+      const c = d.components || detail?.routing?.confidence_components || {};
+      const values = {
+        classification_confidence: safeNum(c.classification_confidence ?? c.classification),
+        retrieval_similarity: safeNum(c.retrieval_similarity),
+        verifier_score: safeNum(c.verifier_score),
+        privacy_score: safeNum(c.privacy_score ?? (c.privacy_risk != null ? 1 - c.privacy_risk : 0)),
+      };
+      const rows = [
+        ['Classification', '35%', values.classification_confidence, '#1D9E75'],
+        ['Similar ticket match', '25%', values.retrieval_similarity, '#378ADD'],
+        ['Answer quality', '30%', values.verifier_score, '#7c3aed'],
+        ['Privacy safety', '10%', values.privacy_score, '#BA7517'],
+      ];
+      const overall = detail?.routing?.confidence_score ?? d.avgConfidence;
+      const overallPct = pct(overall);
+      document.getElementById('confidence-breakdown').innerHTML = rows.map(([label, weight, value, color]) => {
+        const p = pct(value);
+        return `<div class="confidence-row">
+          <div class="label">${label} (${weight})</div>
+          <div class="bar-track"><span class="bar-fill" style="width:${clamp(p, 0, 100)}%;background:${color}"></span></div>
+          <div class="bar-num">${p}%</div>
+        </div>`;
+      }).join('') + `<div class="formula">Final score = (classification × 0.35) + (match × 0.25) + (quality × 0.30) + (privacy × 0.10)</div>
+      <div class="overall-score" style="color:${confidenceColor(overallPct)}">Overall: ${overallPct}%</div>`;
+    }
+
+    function getHeatmapGrid(total) {
+      const days = [0, 1, 2, 3, 4, 5, 6];
+      const slots = [0, 6, 12, 18];
+      let max = 0;
+      const grid = slots.map(hour => days.map(day => {
+        const v = safeNum(sessionStorage.getItem(`heatmap_hour_${day}_${hour}`));
+        max = Math.max(max, v);
+        return v;
+      }));
+      let estimated = false;
+      if (!max && total > 0) {
+        estimated = true;
+        const base = Math.max(1, Math.floor(total / 28));
+        grid.forEach((row, r) => row.forEach((_, c) => {
+          row[c] = base + ((r + c) % 3 === 0 ? 1 : 0);
+          max = Math.max(max, row[c]);
+        }));
+      }
+      return { grid, max: max || 1, estimated };
+    }
+
+    function renderHeatmap(d) {
+      const { grid, max, estimated } = getHeatmapGrid(d.total);
+      const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
+      const slots = ['00 h', '06 h', '12 h', '18 h'];
+      let htmlOut = '<div class="heatmap-wrap"><div></div>' + days.map(day => `<div class="heat-day">${day}</div>`).join('');
+      grid.forEach((row, r) => {
+        htmlOut += `<div class="heat-label">${slots[r]}</div>`;
+        row.forEach(count => {
+          const opacity = clamp(count / max, .08, 1);
+          htmlOut += `<div class="heat-cell" title="${count} tickets" style="background:rgba(55, 138, 221, ${opacity})"></div>`;
+        });
+      });
+      htmlOut += '</div>';
+      if (estimated) htmlOut += '<div class="heat-note">Estimated — seeded from total</div>';
+      document.getElementById('activity-heatmap').innerHTML = htmlOut;
+    }
+
+    function renderLatency(d) {
+      const lat = d.routeLatency || {};
+      const rows = ROUTES.map(r => ({ ...r, value: safeNum(lat[r.key] ?? lat[r.alt]) })).filter(r => r.value > 0);
+      if (!rows.length) {
+        document.getElementById('latency-by-route').innerHTML = '<div class="empty-copy">No response time data yet.</div>';
+        return;
+      }
+      const max = Math.max(...rows.map(r => r.value), 1);
+      const cache = rows.find(r => r.key === 'semantic_cache')?.value;
+      const rag = rows.find(r => r.key === 'generative_rag')?.value;
+      const ratio = cache && rag ? Math.max(1, Math.round(rag / cache)) : null;
+      document.getElementById('latency-by-route').innerHTML = rows.map(r => `
+        <div class="latency-row">
+          <div class="label">${html(r.short)}</div>
+          <div class="bar-track"><span class="bar-fill" style="width:${r.value / max * 100}%;background:${r.color}"></span></div>
+          <div class="bar-num">${formatLatency(r.value)}</div>
+        </div>`).join('') +
+        `<div style="font-size:12px;color:#374151;margin-top:10px">${ratio ? `Cache hits are ${ratio}× faster than AI-generated responses` : 'Cache and AI-generated latency comparison will appear after both routes run.'}</div>`;
+    }
+
+    async function fetchDashboard() {
+      const grid = document.getElementById('stats-grid');
+      grid.classList.add('refreshing');
+      try {
+        latestDashboard = await apiFetch('/v1/dashboard');
+        const d = normalizeDashboard(latestDashboard);
+        renderStats(d);
+        drawRouteChart(d);
+        renderCategories(d);
+        renderConfidence(d, latestDetail);
+        renderHeatmap(d);
+        renderLatency(d);
+        renderWarnings();
+      } catch(e) {
+        console.error(e);
+        document.getElementById('stat-total').innerHTML = '<div class="inline-error">Could not load — retrying in 30 s</div>';
+      } finally {
+        grid.classList.remove('refreshing');
+        resetRing();
+      }
+    }
+
+    async function fetchRiskQueue() {
+      try {
+        const d = await apiFetch('/v1/intelligence/routing');
+        const queue = (d.sla_risk_queue || []).slice().sort((a, b) => safeNum(b.sla_risk_score || b.sla_risk?.score) - safeNum(a.sla_risk_score || a.sla_risk?.score));
+        const escCount = latestDashboard ? normalizeDashboard(latestDashboard).escalations : 0;
+        document.getElementById('risk-count').textContent = `${escCount} escalation${escCount === 1 ? '' : 's'}`;
+        if (!queue.length) {
+          document.getElementById('risk-table').innerHTML = '<div class="empty-copy" style="padding:0 16px 16px">No tickets at risk right now.</div>';
+          return;
+        }
+        document.getElementById('risk-table').innerHTML = `<div class="table-scroll"><table>
+          <thead><tr><th>Ticket</th><th>Short description</th><th>Category</th><th>Route</th><th>Confidence</th><th>SLA risk</th><th>Action</th></tr></thead>
+          <tbody>${queue.slice(0, 5).map(t => {
+            const risk = safeNum(t.sla_risk_score || t.sla_risk?.score);
+            const conf = pct(t.confidence_score);
+            const riskBg = risk > .8 ? '#fef2f2' : risk > .5 ? '#fffbeb' : 'transparent';
+            return `<tr>
+              <td><a class="linkish" href="${detailUrl(t.ticket_id)}">${html(t.ticket_id)}</a></td>
+              <td class="truncate" title="${html(t.short_description || '')}">${html((t.short_description || '').slice(0, 45))}${(t.short_description || '').length > 45 ? '...' : ''}</td>
+              <td>${html(t.assigned_category || t.ticket_category || t.category || '—')}</td>
+              <td>${routePill(t.route_path)}</td>
+              <td style="color:${confidenceColor(conf)};font-weight:700">${conf}%</td>
+              <td style="background:${riskBg};font-weight:700">${risk.toFixed(2)}</td>
+              <td><a class="review-btn" href="escalations.html">Review →</a></td>
+            </tr>`;
+          }).join('')}</tbody></table></div>`;
+      } catch(e) {
+        console.error(e);
+        document.getElementById('risk-table').innerHTML = '<div class="inline-error" style="padding:0 16px 16px">Could not load — retrying in 60 s</div>';
+      }
+    }
+
+    function recentRow(t, flash = false) {
+      const id = t.ticket_id || t.id;
+      const conf = pct(t.confidence_score);
+      const redactions = safeNum(t.redacted_pii_count || t.redactions);
+      const level = t.sla_risk_level || (safeNum(t.sla_risk_score) > .8 ? 'critical' : safeNum(t.sla_risk_score) > .5 ? 'elevated' : 'normal');
+      return `<tr data-ticket-id="${html(id)}" class="${flash ? 'flash' : ''}" onclick="location.href='${detailUrl(id)}'">
+        <td><a class="linkish" onclick="event.stopPropagation()" href="${detailUrl(id)}">${html(id)}</a></td>
+        <td class="truncate" title="${html(t.short_description || '')}">${html(t.short_description || '—')}</td>
+        <td>${html(t.category || t.assigned_category || '—')}</td>
+        <td>${routePill(t.route_path)}</td>
+        <td style="color:${confidenceColor(conf)};font-weight:700">${t.confidence_score != null ? conf + '%' : '—'}</td>
+        <td style="color:${riskTextColor(level)};font-weight:700">${html(level || 'normal')}</td>
+        <td>${redactions ? `<a class="linkish" onclick="event.stopPropagation()" href="${privacyUrl(id)}" style="color:#E24B4A">${redactions} items</a>` : '—'}</td>
+        <td class="relative-time" data-created-at="${html(t.created_at || '')}">${relativeTime(t.created_at)}</td>
+      </tr>`;
+    }
+
+    async function fetchRecentTickets({ initial = false } = {}) {
+      try {
+        const res = await apiFetch('/v1/tickets/recent?limit=20');
+        const rows = res.tickets || [];
+        const body = document.getElementById('recent-body');
+        if (!rows.length) {
+          body.innerHTML = '<tr><td colspan="8" class="empty-copy">No recent tickets.</td></tr>';
+          recentIds = new Set();
+          return;
+        }
+        if (initial || !recentIds.size) {
+          recentIds = new Set(rows.map(t => t.ticket_id || t.id));
+          body.innerHTML = rows.map(t => recentRow(t)).join('');
+          return;
+        }
+        const incoming = rows.filter(t => !recentIds.has(t.ticket_id || t.id));
+        incoming.reverse().forEach(t => {
+          const id = t.ticket_id || t.id;
+          recentIds.add(id);
+          body.insertAdjacentHTML('afterbegin', recentRow(t, true));
+          const row = body.querySelector(`tr[data-ticket-id="${CSS.escape(id)}"]`);
+          setTimeout(() => row?.classList.remove('flash'), 80);
+        });
+        [...body.querySelectorAll('tr[data-ticket-id]')].slice(20).forEach(row => {
+          recentIds.delete(row.dataset.ticketId);
+          row.remove();
+        });
+      } catch(e) {
+        console.error(e);
+        document.getElementById('recent-body').innerHTML = '<tr><td colspan="8" class="inline-error">Could not load — retrying in 60 s</td></tr>';
+      }
+    }
+
+    async function quickRoute(ev) {
+      ev.preventDefault();
+      const input = document.getElementById('quick-ticket-text');
+      const btn = document.getElementById('quick-route-btn');
+      const out = document.getElementById('quick-route-result');
+      const text = input.value.trim();
+      if (!text) {
+        out.className = 'quick-result err';
+        out.textContent = 'Paste a ticket description first.';
+        return;
+      }
+      const ticketId = `DASH-${Date.now()}`;
+      btn.disabled = true;
+      btn.textContent = 'Routing...';
+      out.className = 'quick-result';
+      out.textContent = '';
+      try {
+        const res = await apiFetch('/v1/tickets/route', {
+          method: 'POST',
+          body: JSON.stringify({
+            ticket_id: ticketId,
+            short_description: text,
+            description: text,
+            source: 'dashboard',
+          }),
+        });
+        const route = routeMeta(res.route_path).label;
+        out.className = 'quick-result ok';
+        out.innerHTML = `→ ${html(route)} · ${Math.round(safeNum(res.confidence_score) * 100)}% confidence${res.matched_ticket_id ? ` · ${html(res.matched_ticket_id)} matched` : ''}`;
+        input.value = '';
+        setTimeout(() => { if (out.classList.contains('ok')) out.textContent = ''; }, 10000);
+        await Promise.all([fetchDashboard(), fetchLastTrace(), fetchRiskQueue(), fetchRecentTickets()]);
+      } catch(e) {
+        console.error(e);
+        out.className = 'quick-result err';
+        out.textContent = e.message || 'Could not route this ticket.';
+      } finally {
+        btn.disabled = false;
+        btn.textContent = '▶ Route it';
+      }
+    }
+
+    function updateRelativeTimes() {
+      document.querySelectorAll('.relative-time').forEach(el => {
+        el.textContent = relativeTime(el.dataset.createdAt);
+      });
+    }
+
+    function resetRing() {
+      const ring = document.getElementById('refresh-ring');
+      ring.classList.add('reset');
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => ring.classList.remove('reset'));
+      });
+    }
+
+    function connectHeatmapStream() {
+      try {
+        stream = apiStream('/v1/tickets/stream?interval_ms=5000&window=50', event => {
+          if (!event?.ticket_id) return;
+          const now = new Date();
+          const day = (now.getDay() + 6) % 7;
+          const hour = Math.floor(now.getHours() / 6) * 6;
+          const key = `heatmap_hour_${day}_${hour}`;
+          sessionStorage.setItem(key, String(safeNum(sessionStorage.getItem(key)) + 1));
+          if (latestDashboard) renderHeatmap(normalizeDashboard(latestDashboard));
+        }, () => {});
+      } catch {}
+    }
+
+    async function refreshAll() {
+      await Promise.all([fetchHealth(), fetchDashboard(), fetchLastTrace(), fetchRiskQueue(), fetchRecentTickets()]);
+    }
+
+    document.getElementById('quick-route-form').addEventListener('submit', quickRoute);
+    document.getElementById('dismiss-warning').addEventListener('click', () => {
+      const banner = document.getElementById('health-warning');
+      if (banner.dataset.dismissKey) sessionStorage.setItem(banner.dataset.dismissKey, '1');
+      banner.classList.remove('show');
+    });
+    document.getElementById('refresh-ring').addEventListener('click', refreshAll);
+    window.addEventListener('resize', () => latestDashboard && drawRouteChart(normalizeDashboard(latestDashboard)));
+    window.addEventListener('beforeunload', () => {
+      intervals.forEach(clearInterval);
+      stream?.close?.();
+    });
+
     initPage();
-    loadDashboard();
-    startAutoRefresh(loadDashboard, 20);
+    refreshAll();
+    connectHeatmapStream();
+    setTimer(fetchHealth, 60000);
+    setTimer(fetchDashboard, 30000);
+    setTimer(() => { fetchRiskQueue(); fetchRecentTickets(); }, 60000);
+    setTimer(fetchLastTrace, 30000);
+    setTimer(updateRelativeTimes, 60000);
   </script>
 </body>
 

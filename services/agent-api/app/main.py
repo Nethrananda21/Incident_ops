@@ -44,12 +44,14 @@ def health() -> dict:
         repo_ok = get_repo().ping()
     except Exception:
         repo_ok = False
+    uptime = int(time.time() - STARTED_AT)
     return {
         "status": "ok" if repo_ok else "degraded",
         "clickhouse": repo_ok,
         "nvidia_configured": bool(settings.nvidia_api_key),
         "model": settings.nvidia_llm_model,
-        "uptime_seconds": int(time.time() - STARTED_AT),
+        "uptime": uptime,
+        "uptime_seconds": uptime,
     }
 
 
@@ -118,6 +120,24 @@ def dashboard() -> dict:
         ORDER BY c DESC, route_path ASC
         """
     ).result_rows
+    route_latency_rows = repo.client.query(
+        """
+        SELECT route_path, if(count() = 0, 0, avg(latency_ms)) AS avg_ms
+        FROM routing_decisions
+        GROUP BY route_path
+        ORDER BY route_path ASC
+        """
+    ).result_rows
+    component_row = repo.client.query(
+        """
+        SELECT
+            if(count() = 0, 0, avg(classification_confidence)),
+            if(count() = 0, 0, avg(retrieval_similarity)),
+            if(count() = 0, 0, avg(verifier_score)),
+            if(count() = 0, 0, avg(greatest(0, 1 - privacy_risk)))
+        FROM routing_decisions
+        """
+    ).result_rows[0]
     recent_rows = repo.client.query(
         """
         SELECT ticket_id, short_description, category, assignment_group, urgency, impact, created_at
@@ -134,11 +154,30 @@ def dashboard() -> dict:
         ORDER BY c DESC, entity_type ASC
         """
     ).result_rows
+    route_distribution = {row[0]: int(row[1]) for row in route_path_rows}
+    route_latency_ms = {row[0]: round(float(row[1]), 1) for row in route_latency_rows}
+    category_distribution = [
+        {
+            "name": row[0],
+            "count": int(row[1]),
+            "percentage": round(safe_ratio(int(row[1]), ticket_total), 4),
+        }
+        for row in category_rows
+    ]
+    avg_confidence_components = {
+        "classification_confidence": round(float(component_row[0]), 4),
+        "retrieval_similarity": round(float(component_row[1]), 4),
+        "verifier_score": round(float(component_row[2]), 4),
+        "privacy_score": round(float(component_row[3]), 4),
+    }
     return {
         "tickets_total": ticket_total,
+        "total_tickets": ticket_total,
         "routing_decisions_total": decision_total,
         "privacy_findings_total": audit_total,
+        "privacy_findings_count": audit_total,
         "categories": [{"name": row[0], "count": int(row[1])} for row in category_rows],
+        "category_distribution": category_distribution,
         "assignment_groups": [{"name": row[0], "count": int(row[1])} for row in group_rows],
         "routing": {
             "decisions": int(decision_row[0]),
@@ -150,7 +189,21 @@ def dashboard() -> dict:
             "avg_latency_ms": round(float(decision_row[6]), 1),
             "route_paths": [{"name": row[0], "count": int(row[1])} for row in route_path_rows],
         },
+        "avg_confidence": round(float(decision_row[1]), 4),
+        "cache_hit_rate": safe_ratio(int(decision_row[5]), int(decision_row[0])),
+        "escalation_count": int(decision_row[4]),
+        "avg_latency_ms": round(float(decision_row[6]), 1),
+        "route_distribution": {
+            "semantic_cache": route_distribution.get("semantic_cache", 0),
+            "generative_rag": route_distribution.get("generative_rag", 0),
+            "out_of_distribution": route_distribution.get("out_of_distribution", 0),
+            "human_review": route_distribution.get("human_review_required", 0),
+            "human_review_required": route_distribution.get("human_review_required", 0),
+        },
+        "route_latency_ms": route_latency_ms,
+        "avg_confidence_components": avg_confidence_components,
         "privacy_by_type": [{"entity_type": row[0], "count": int(row[1])} for row in privacy_rows],
+        "top_entity_types": [row[0] for row in privacy_rows[:2]],
         "recent_tickets": [ticket_from_row(row) for row in recent_rows],
         "thresholds": {
             "fast_path_similarity": settings.fast_path_similarity_threshold,
@@ -164,21 +217,97 @@ def dashboard() -> dict:
 def recent_tickets(limit: int = Query(default=30, ge=1, le=200)) -> dict:
     rows = get_repo().client.query(
         """
-        SELECT ticket_id, short_description, category, assignment_group, urgency, impact, created_at,
-               sanitized_text, resolution, source
-        FROM tickets
-        ORDER BY created_at DESC, ticket_id DESC
+        WITH latest_tickets AS (
+            SELECT
+                ticket_id,
+                argMax(number, created_at) AS number,
+                argMax(short_description, created_at) AS short_description,
+                argMax(category, created_at) AS category,
+                argMax(assignment_group, created_at) AS assignment_group,
+                argMax(urgency, created_at) AS urgency,
+                argMax(impact, created_at) AS impact,
+                argMax(sanitized_text, created_at) AS sanitized_text,
+                argMax(resolution, created_at) AS resolution,
+                argMax(source, created_at) AS source,
+                max(created_at) AS latest_created_at
+            FROM tickets
+            GROUP BY ticket_id
+        ),
+        latest_decisions AS (
+            SELECT
+                ticket_id,
+                argMax(assigned_category, created_at) AS assigned_category,
+                argMax(confidence_score, created_at) AS confidence_score,
+                argMax(retrieval_similarity, created_at) AS retrieval_similarity,
+                argMax(verifier_score, created_at) AS verifier_score,
+                argMax(escalation_required, created_at) AS escalation_required,
+                argMax(route_path, created_at) AS route_path,
+                argMax(semantic_cache_hit, created_at) AS semantic_cache_hit,
+                argMax(matched_ticket_id, created_at) AS matched_ticket_id,
+                argMax(latency_ms, created_at) AS latency_ms,
+                argMax(sla_risk_score, created_at) AS sla_risk_score,
+                argMax(sla_risk_level, created_at) AS sla_risk_level,
+                max(created_at) AS latest_routed_at
+            FROM routing_decisions
+            GROUP BY ticket_id
+        ),
+        privacy_counts AS (
+            SELECT ticket_id, count() AS redactions
+            FROM privacy_audit
+            GROUP BY ticket_id
+        )
+        SELECT
+            t.ticket_id,
+            t.short_description,
+            t.category,
+            t.assignment_group,
+            t.urgency,
+            t.impact,
+            t.latest_created_at,
+            t.sanitized_text,
+            t.resolution,
+            t.source,
+            if(isNull(d.ticket_id), 'unrouted',
+               if(d.escalation_required = 1, 'human_review_required',
+                  if(d.semantic_cache_hit = 1, 'semantic_cache_resolved', 'resolved'))) AS status,
+            ifNull(d.route_path, 'unrouted') AS route_path,
+            ifNull(d.confidence_score, 0) AS confidence_score,
+            ifNull(d.retrieval_similarity, 0) AS retrieval_similarity,
+            ifNull(d.verifier_score, 0) AS verifier_score,
+            ifNull(d.escalation_required, 0) AS escalation_required,
+            ifNull(d.semantic_cache_hit, 0) AS semantic_cache_hit,
+            ifNull(d.matched_ticket_id, '') AS matched_ticket_id,
+            ifNull(d.latency_ms, 0) AS latency_ms,
+            ifNull(d.sla_risk_score, 0) AS sla_risk_score,
+            ifNull(d.sla_risk_level, '') AS sla_risk_level,
+            ifNull(p.redactions, 0) AS redactions
+        FROM latest_tickets AS t
+        LEFT JOIN latest_decisions AS d ON t.ticket_id = d.ticket_id
+        LEFT JOIN privacy_counts AS p ON t.ticket_id = p.ticket_id
+        ORDER BY t.latest_created_at DESC, t.ticket_id DESC
         LIMIT %(limit)s
         """,
         parameters={"limit": limit},
     ).result_rows
     return {
         "tickets": [
-            ticket_from_row(row)
-            | {
+            {
+                **ticket_from_row(row),
                 "sanitized_text": row[7],
                 "resolution": row[8],
                 "source": row[9],
+                "status": row[10],
+                "route_path": row[11],
+                "confidence_score": float(row[12]),
+                "retrieval_similarity": float(row[13]),
+                "verifier_score": float(row[14]),
+                "escalation_required": bool(row[15]),
+                "semantic_cache_hit": bool(row[16]),
+                "matched_ticket_id": row[17] or None,
+                "latency_ms": int(row[18]),
+                "sla_risk_score": float(row[19]),
+                "sla_risk_level": row[20] or None,
+                "redacted_pii_count": int(row[21]),
             }
             for row in rows
         ]
