@@ -155,12 +155,11 @@ function renderReviewState(text) {
 
 function openHumanReviewPanel() {
   if (!currentTicket) return;
-  addManualReview(currentTicket, 'Operator requested a second review from the ticket detail page.');
   const form = document.getElementById('inline-review-form');
   form?.classList.add('open');
   document.getElementById('review-reason')?.focus();
   document.getElementById('review-panel')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  renderReviewState('Added to the Human Review queue. Complete the decision below.');
+  renderReviewState('Complete the review decision below. It will be sent to the backend.');
 }
 
 function setReviewDecision(decision) {
@@ -197,13 +196,11 @@ async function submitInlineReview() {
   };
   const btn = document.getElementById('submit-inline-review');
   if (btn) { btn.disabled = true; btn.textContent = 'Submitting...'; }
-  addManualReview(currentTicket, `${selectedReviewDecision === 'approve' ? 'Approved' : 'Disapproved'} from ticket detail: ${reason}`);
   try {
     await apiFetch('/v1/review/escalations', { method: 'POST', body: JSON.stringify(payload) });
-    removeManualReview(id);
     renderReviewState(`${selectedReviewDecision === 'approve' ? 'Approval' : 'Disapproval'} submitted to Human Review.`);
   } catch(e) {
-    renderReviewState(`Saved on this page and added to Human Review queue. Backend review submit was unavailable: ${e.message}`);
+    renderReviewState(`Backend review submit was unavailable: ${e.message}`);
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = 'Submit Review Decision'; }
   }
