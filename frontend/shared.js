@@ -490,12 +490,7 @@ function buildResolutionPlan(t) {
   const source = t.suggested_resolution_items?.length
     ? t.suggested_resolution_items
     : firstDefined(t.resolution, t.matched_resolution, t.suggested_resolution_preview);
-  const rawItems = plainResolutionItems(source);
-  const items = rawItems.length ? rawItems : [
-    'Confirm the affected service, user scope, timestamps, and business impact.',
-    'Collect relevant logs, recent changes, screenshots, and monitoring signals.',
-    'Assign the incident to the recommended resolver group for investigation.',
-  ];
+  const items = plainResolutionItems(source);
   const evidence = t.semantic_cache_hit
     ? 'Resolution reused from an approved high-similarity historical incident.'
     : t.route_path === 'generative_rag'
@@ -509,9 +504,11 @@ function buildResolutionPlan(t) {
       <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:.08em;text-transform:uppercase;margin-bottom:10px;padding-bottom:8px;border-bottom:1.5px solid var(--border)">Resolution Plan</div>
       <div style="background:#f8fafc;border:1px solid var(--border);border-radius:6px;padding:12px 14px">
         <div style="font-size:10px;font-weight:700;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:8px">How To Resolve</div>
-        <ol style="margin:0;padding-left:18px;color:var(--text2);font-size:12px;line-height:1.75">
-          ${items.map(item => `<li>${html(item)}</li>`).join('')}
-        </ol>
+        ${items.length
+          ? `<ol style="margin:0;padding-left:18px;color:var(--text2);font-size:12px;line-height:1.75">
+              ${items.map(item => `<li>${html(item)}</li>`).join('')}
+            </ol>`
+          : '<div class="empty-state" style="padding:10px 0;text-align:left">No backend resolution plan returned for this ticket.</div>'}
         <div style="font-size:10px;color:var(--text3);line-height:1.5;margin-top:10px">${html(evidence)}</div>
       </div>
     </div>`;
