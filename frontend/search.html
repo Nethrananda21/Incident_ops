@@ -68,7 +68,7 @@
       <option value="">All Route Paths</option>
       <option value="semantic_cache">semantic cache</option>
       <option value="generative_rag">generative rag</option>
-      <option value="out_of_distribution">out of distribution</option>
+      <option value="out_of_distribution">legacy weak evidence</option>
       <option value="human_review_required">human review required</option>
     </select>
     <select id="f-urg" style="width:110px">
@@ -216,6 +216,8 @@ async function openDetail(id) {
 
 initPage();
 populateFilters();
+const initialSearchQuery = new URLSearchParams(location.search).get('q');
+if (initialSearchQuery) document.getElementById('q').value = initialSearchQuery;
 runSearch();
 startAutoRefresh(() => {
   if (!document.getElementById('live-toggle')?.checked) runSearch();

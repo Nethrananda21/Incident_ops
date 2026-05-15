@@ -24,6 +24,7 @@ import (
 const (
 	detectorVersion = "privacy-shield-regex-v1"
 	policyVersion   = "enterprise-ticket-policy-v1"
+	maxBodyBytes    = 1 << 20
 )
 
 type ingestRequest struct {
@@ -120,6 +121,10 @@ func main() {
 		Addr:              addr,
 		Handler:           requestLogger(logger, mux),
 		ReadHeaderTimeout: 5 * time.Second,
+		ReadTimeout:       10 * time.Second,
+		WriteTimeout:      15 * time.Second,
+		IdleTimeout:       60 * time.Second,
+		MaxHeaderBytes:    1 << 20,
 	}
 
 	go func() {
@@ -139,8 +144,14 @@ func main() {
 }
 
 func newKafkaClient() (*kgo.Client, error) {
-	brokers := strings.Split(env("REDPANDA_BROKERS", ""), ",")
-	if len(brokers) == 0 || strings.TrimSpace(brokers[0]) == "" {
+	rawBrokers := strings.Split(env("REDPANDA_BROKERS", ""), ",")
+	brokers := make([]string, 0, len(rawBrokers))
+	for _, broker := range rawBrokers {
+		if trimmed := strings.TrimSpace(broker); trimmed != "" {
+			brokers = append(brokers, trimmed)
+		}
+	}
+	if len(brokers) == 0 {
 		return nil, errors.New("REDPANDA_BROKERS is empty")
 	}
 	opts := []kgo.Opt{
@@ -170,9 +181,18 @@ func (a *app) metrics(w http.ResponseWriter, _ *http.Request) {
 
 func (a *app) ingest(w http.ResponseWriter, r *http.Request) {
 	var req ingestRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	r.Body = http.MaxBytesReader(w, r.Body, maxBodyBytes)
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
 		a.errors.Add(1)
 		writeError(w, http.StatusBadRequest, "invalid JSON payload")
+		return
+	}
+	if (req.Urgency != 0 && (req.Urgency < 1 || req.Urgency > 3)) ||
+		(req.Impact != 0 && (req.Impact < 1 || req.Impact > 3)) {
+		a.errors.Add(1)
+		writeError(w, http.StatusBadRequest, "urgency and impact must be between 1 and 3 when provided")
 		return
 	}
 
@@ -278,7 +298,7 @@ var detectors = []detector{
 func redact(input string) (string, []finding) {
 	matches := findMatches(input)
 	if len(matches) == 0 {
-		return input, nil
+		return input, []finding{}
 	}
 
 	counts := map[string]int{}
@@ -350,6 +370,7 @@ func env(name, fallback string) string {
 }
 
 func writeJSON(w http.ResponseWriter, status int, value any) {
+	secureHeaders(w)
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
 	_ = json.NewEncoder(w).Encode(value)
@@ -362,7 +383,14 @@ func writeError(w http.ResponseWriter, status int, message string) {
 func requestLogger(logger *slog.Logger, next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
+		secureHeaders(w)
 		next.ServeHTTP(w, r)
 		logger.Info("request", "method", r.Method, "path", r.URL.Path, "duration_ms", time.Since(start).Milliseconds())
 	})
+}
+
+func secureHeaders(w http.ResponseWriter) {
+	w.Header().Set("X-Content-Type-Options", "nosniff")
+	w.Header().Set("Referrer-Policy", "no-referrer")
+	w.Header().Set("Cache-Control", "no-store")
 }

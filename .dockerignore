@@ -1,4 +1,7 @@
 .git
+.env
+.env.*
+!.env.example
 .DS_Store
 frontend.zip
 **/.DS_Store

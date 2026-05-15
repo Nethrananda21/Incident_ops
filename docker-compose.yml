@@ -1,6 +1,7 @@
 services:
   redpanda:
     image: redpandadata/redpanda:v24.3.5
+    restart: unless-stopped
     command:
       - redpanda
       - start
@@ -11,10 +12,10 @@ services:
       - --node-id=0
       - --check=false
       - --kafka-addr=PLAINTEXT://0.0.0.0:9092,OUTSIDE://0.0.0.0:19092
-      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://localhost:19092
+      - --advertise-kafka-addr=PLAINTEXT://redpanda:9092,OUTSIDE://${REDPANDA_EXTERNAL_HOST:-localhost}:${REDPANDA_EXTERNAL_PORT:-19092}
     ports:
-      - "19092:19092"
-      - "9644:9644"
+      - "${REDPANDA_EXTERNAL_PORT:-19092}:19092"
+      - "${REDPANDA_ADMIN_PORT:-9644}:9644"
     healthcheck:
       test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.*true'"]
       interval: 10s
@@ -23,13 +24,14 @@ services:
 
   clickhouse:
     image: clickhouse/clickhouse-server:24.12
+    restart: unless-stopped
     environment:
       CLICKHOUSE_DB: incident_ai
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: clickhouse
     ports:
-      - "8123:8123"
-      - "9000:9000"
+      - "${CLICKHOUSE_HTTP_PORT:-8123}:8123"
+      - "${CLICKHOUSE_NATIVE_PORT:-9000}:9000"
     volumes:
       - ./infra/clickhouse/init:/docker-entrypoint-initdb.d:ro
       - clickhouse-data:/var/lib/clickhouse
@@ -42,71 +44,103 @@ services:
   privacy-shield:
     build:
       context: ./services/privacy-shield
+    restart: unless-stopped
     environment:
       REDPANDA_BROKERS: redpanda:9092
       HTTP_ADDR: ":8080"
     ports:
-      - "8080:8080"
+      - "${PRIVACY_SHIELD_PORT:-8080}:8080"
     depends_on:
       redpanda:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O- http://localhost:8080/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
 
   api-gateway:
     build:
       context: ./services/agent-api
+    restart: unless-stopped
     environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_VERSION: ${APP_VERSION:-1.0.0}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      CORS_ALLOWED_ORIGINS: ${CORS_ALLOWED_ORIGINS:-http://localhost:8081,http://127.0.0.1:8081}
+      TRUSTED_HOSTS: ${TRUSTED_HOSTS:-*}
+      MAX_REQUEST_BODY_BYTES: ${MAX_REQUEST_BODY_BYTES:-64000}
+      ROUTE_TIMEOUT_SECONDS: ${ROUTE_TIMEOUT_SECONDS:-45}
       CLICKHOUSE_HOST: clickhouse
       CLICKHOUSE_PORT: "8123"
       CLICKHOUSE_DATABASE: incident_ai
       CLICKHOUSE_USER: default
       CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-clickhouse}
+      CLICKHOUSE_CONNECT_TIMEOUT_SECONDS: ${CLICKHOUSE_CONNECT_TIMEOUT_SECONDS:-5}
+      CLICKHOUSE_SEND_RECEIVE_TIMEOUT_SECONDS: ${CLICKHOUSE_SEND_RECEIVE_TIMEOUT_SECONDS:-30}
       REDPANDA_BROKERS: redpanda:9092
       PRIVACY_SHIELD_URL: http://privacy-shield:8080
+      PRIVACY_TIMEOUT_SECONDS: ${PRIVACY_TIMEOUT_SECONDS:-3}
       NVIDIA_API_KEY: ${NVIDIA_API_KEY:-}
       NVIDIA_BASE_URL: ${NVIDIA_BASE_URL:-https://integrate.api.nvidia.com/v1}
       NVIDIA_LLM_MODEL: ${NVIDIA_LLM_MODEL:-meta/llama-3.3-70b-instruct}
       LLM_MAX_TOKENS: ${LLM_MAX_TOKENS:-700}
       LLM_TEMPERATURE: ${LLM_TEMPERATURE:-0.1}
       LLM_TIMEOUT_SECONDS: ${LLM_TIMEOUT_SECONDS:-12}
+      LLM_MAX_RETRIES: ${LLM_MAX_RETRIES:-1}
+      LLM_MAX_INPUT_CHARS: ${LLM_MAX_INPUT_CHARS:-8000}
+      LLM_MAX_CONTEXT_CHARS: ${LLM_MAX_CONTEXT_CHARS:-12000}
+      LLM_MAX_CONTEXT_ITEMS: ${LLM_MAX_CONTEXT_ITEMS:-5}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/all-MiniLM-L6-v2}
+      EMBEDDING_LOCAL_FILES_ONLY: ${EMBEDDING_LOCAL_FILES_ONLY:-true}
       EMBEDDING_DIM: ${EMBEDDING_DIM:-384}
       ROUTING_CONFIDENCE_THRESHOLD: ${ROUTING_CONFIDENCE_THRESHOLD:-0.85}
       FAST_PATH_SIMILARITY_THRESHOLD: ${FAST_PATH_SIMILARITY_THRESHOLD:-0.95}
       RAG_SIMILARITY_THRESHOLD: ${RAG_SIMILARITY_THRESHOLD:-0.70}
       RAG_TOP_K: ${RAG_TOP_K:-5}
+      APPROVED_KNOWLEDGE_SOURCES: ${APPROVED_KNOWLEDGE_SOURCES:-6StringNinja/synthetic-servicenow-incidents,curated,historical,seed}
     ports:
-      - "8000:8000"
+      - "${API_GATEWAY_PORT:-8000}:8000"
     depends_on:
       clickhouse:
         condition: service_healthy
       redpanda:
         condition: service_healthy
       privacy-shield:
-        condition: service_started
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/v1/ready', timeout=5).read()"]
+      interval: 15s
+      timeout: 8s
+      retries: 12
+      start_period: 45s
 
   review-ui:
     build:
       context: .
       dockerfile: services/review-ui/Dockerfile
+    restart: unless-stopped
     ports:
-      - "8081:80"
+      - "${REVIEW_UI_PORT:-8081}:80"
     depends_on:
       api-gateway:
-        condition: service_started
+        condition: service_healthy
 
   prometheus:
     image: prom/prometheus:v2.55.1
+    restart: unless-stopped
     ports:
-      - "9090:9090"
+      - "${PROMETHEUS_PORT:-9090}:9090"
     volumes:
       - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
 
   grafana:
     image: grafana/grafana:11.4.0
+    restart: unless-stopped
     ports:
-      - "3000:3000"
+      - "${GRAFANA_PORT:-3000}:3000"
     environment:
-      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
     volumes:
       - grafana-data:/var/lib/grafana
 

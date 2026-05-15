@@ -11,12 +11,12 @@ The system directly implements the requested capabilities:
 - **Classifies incoming tickets** into IT categories such as Network, Application, Infrastructure, Access Management, Security, Database, and Storage.
 - **Routes to the correct department** using category and assignment-group signals.
 - **Suggests resolution steps** using retrieval-augmented generation over sanitized historical tickets.
-- **Escalates when uncertain** using composite confidence, verifier score, retrieval similarity, and privacy risk.
+- **Escalates when the LLM decides human review is needed** using ticket scope, RAG grounding, policy/risk signals, and confidence evidence.
 - **Tracks confidence score** with component-level explainability.
 - **Retrieves similar past tickets** from ClickHouse as the RAG knowledge base.
-- **Uses an agentic workflow** through LangGraph nodes for privacy, retrieval, triage, generation, verification, and escalation.
-- **Bypasses the LLM for repetitive known incidents** through deterministic semantic caching.
-- **Explains every routing decision** with matched-ticket evidence, route branch, resolver recommendation, SLA risk, and knowledge coverage.
+- **Uses an agentic workflow** through LangGraph nodes for privacy, retrieval, RAG evidence scoring, assessment, triage, LLM decisioning, and escalation.
+- **Bypasses the LLM only for repetitive known incidents** through deterministic `>=0.95` semantic caching.
+- **Explains every routing decision** with matched-ticket evidence, RAG evidence quality, route branch, resolver recommendation, SLA risk, and knowledge coverage.
 - **Detects operational gaps** such as missing runbooks, high SLA risk, resolver saturation, and reviewer correction trends.
 - **Protects privacy** by redacting sensitive values before AI exposure.
 
@@ -43,11 +43,11 @@ ClickHouse
         v
 Python FastAPI + LangGraph Agent
 - ClickHouse vector retrieval
+- scored RAG evidence pack
 - operational assessment
 - semantic cache fast path
 - triage
-- NVIDIA LLM generation
-- verifier
+- NVIDIA LLM resolution decision
 - escalation
         |
         v
@@ -123,29 +123,32 @@ The Python agent uses LangGraph with these nodes:
    - Retrieves similar sanitized tickets from ClickHouse using native cosine similarity.
    - Excludes unreviewed `Pending Review` API submissions from routing thresholds so repeated bad inputs cannot poison retrieval.
 
-3. **Assessment Node**
+3. **RAG Evidence Node**
+   - Scores the retrieved evidence pack before the LLM sees it.
+   - Computes quality band, top and average similarity, category consensus, resolution coverage, and evidence roles.
+   - Marks retrieved tickets as `cache_candidate` only when they satisfy the strict semantic-cache policy; all other tickets are supporting context for the LLM.
+
+4. **Assessment Node**
    - Runs before the expensive LLM path.
    - Computes knowledge-gap signals, resolver recommendation, SLA risk, and route explanation metadata.
-   - Lets LangGraph branch early into semantic cache, policy escalation, OOD escalation, or generative RAG.
+   - Lets LangGraph branch early only into semantic cache when an approved `>=0.95` match exists; otherwise the workflow proceeds to the LLM decision path.
 
-4. **Fast-Path Node**
+5. **Fast-Path Node**
    - Runs when the nearest approved historical ticket has similarity greater than or equal to `FAST_PATH_SIMILARITY_THRESHOLD`.
-   - Bypasses the NVIDIA LLM and verifier model call.
+   - Bypasses the NVIDIA LLM call.
    - Returns the matched ticket's approved resolution verbatim as a semantic cache hit.
 
-5. **Triage Node**
+6. **Triage Node**
    - Assigns category using retrieved historical incidents and keyword fallback.
 
-6. **Generation Node**
-   - Uses the configured NVIDIA-hosted LLM to draft resolution steps.
-   - Falls back to grounded RAG-derived resolution steps if the model call times out or fails.
-
-7. **Verifier Node**
-   - Uses the LLM to judge grounding and completeness.
-   - Falls back to heuristic scoring when model latency or errors would block the workflow.
+7. **LLM Resolution Decision Node**
+   - Sends the sanitized ticket, scored RAG evidence pack, and top retrieved historical incidents to the configured NVIDIA-hosted LLM.
+   - The LLM returns both the proposed resolution steps and the human-escalation decision.
+   - Falls back conservatively only when the model call times out or fails.
 
 8. **Escalation Node**
-   - Escalates tickets when confidence is below threshold, retrieval similarity is weak, or verifier score is low.
+   - Runs only when the LLM decision says human review is required.
+   - Retrieval similarity can mark knowledge coverage as weak, but it no longer directly decides escalation.
 
 ## Semantic Caching and Fast-Path Routing
 
@@ -154,19 +157,19 @@ The routing agent uses strict similarity thresholds before deciding whether to s
 | Path | Similarity | Behavior |
 | --- | --- | --- |
 | Semantic cache fast path | `>= 0.95` | Return the approved historical resolution immediately and set `semantic_cache_hit=true` |
-| Generative RAG path | `>= 0.70` and `< 0.95` | Send retrieved context to NVIDIA NIM generation, then verifier scoring |
-| Out-of-distribution path | `< 0.70` | Halt AI generation and route to human escalation |
+| LLM-orchestrated RAG path | `< 0.95` | Send scored RAG evidence and top retrieved context to NVIDIA NIM; the LLM drafts the resolution and decides whether human review is required |
 
-This keeps common Tier-1 tickets deterministic, cheap, and fast while still allowing the agentic workflow to handle nuanced incidents. In local Docker verification, a warmed semantic cache route matched `INC00491`, bypassed the LLM, and completed in tens of milliseconds; the first route after API startup is slower because the local embedding model has to warm up.
+This keeps common Tier-1 tickets deterministic, cheap, and fast while still allowing the agentic workflow to handle nuanced incidents. Similarity below `0.95` is not treated as an automatic escalation signal; it is attached as RAG evidence for the LLM to evaluate. In local Docker verification, a warmed semantic cache route matched `INC00491`, bypassed the LLM, and completed in tens of milliseconds; the first route after API startup is slower because the local embedding model has to warm up.
 
 ## Routing Intelligence
 
 The current build includes a production-shaped intelligence layer on top of the routing engine:
 
-- **SLA risk scoring** combines urgency, impact, confidence, retrieval gap, verifier gap, and privacy risk.
+- **SLA risk scoring** combines urgency, impact, confidence, retrieval gap, LLM confidence gap, and privacy risk.
 - **Resolver recommendation** derives the most likely owner group from retrieval consensus and fallback rules.
-- **Knowledge-gap detection** flags weak coverage when retrieval or verifier signals suggest missing runbooks.
-- **Route explainability** stores the privacy gate, nearest approved ticket, route branch, resolver signal, SLA risk, and knowledge coverage for every decision.
+- **RAG evidence scoring** records evidence quality, category consensus, resolution coverage, and cache eligibility before the LLM call.
+- **Knowledge-gap detection** flags weak coverage when RAG evidence or LLM decision confidence suggests missing runbooks.
+- **Route explainability** stores the privacy gate, nearest approved ticket, RAG evidence pack, route branch, resolver signal, SLA risk, and knowledge coverage for every decision.
 - **Human feedback persistence** writes reviewer corrections into ClickHouse as immutable `review_events` for later analytics and active-learning workflows.
 
 The **Intelligence** page surfaces these signals live from the backend with no hardcoded UI data.
@@ -176,18 +179,13 @@ The **Intelligence** page surfaces these signals live from the backend with no h
 The final confidence score is composite:
 
 ```text
-0.35 * classification confidence
-+ 0.25 * retrieval similarity
-+ 0.30 * verifier score
+0.20 * classification confidence
++ 0.20 * retrieval similarity
++ 0.50 * LLM decision confidence
 + 0.10 * privacy safety score
 ```
 
-Escalation occurs when:
-
-- composite confidence is below `ROUTING_CONFIDENCE_THRESHOLD`
-- retrieval similarity is too low
-- verifier score is too low
-- model fallback indicates uncertainty
+Escalation occurs when the LLM decision marks human review as required. Composite confidence, RAG evidence quality, privacy risk, and policy signals remain visible in the route explanation and SLA risk score, but they do not bypass the LLM decision except for the `>= 0.95` semantic-cache fast path.
 
 ## Privacy Design
 
@@ -238,8 +236,8 @@ Because hosted model latency can vary, the code uses:
 
 - bounded model timeout
 - disabled client retries
-- fallback generation
-- fallback verification
+- fallback resolution decisioning
+- conservative human-review fallback on uncertainty
 - escalation on uncertainty
 
 This keeps the pipeline reliable during demos.
@@ -274,15 +272,25 @@ Routing responses include the deterministic routing branch:
 
 ```json
 {
-  "route_path": "semantic_cache | generative_rag | out_of_distribution | human_review_required",
+  "route_path": "semantic_cache | generative_rag | human_review_required",
   "semantic_cache_hit": true,
   "matched_ticket_id": "INC00491",
   "routing_latency_ms": 56,
   "sla_risk": { "score": 0.15, "level": "normal" },
-  "knowledge_gap": { "is_gap": false, "reason": "approved historical context is sufficient for this route" },
+  "knowledge_gap": { "is_gap": false, "reason": "approved historical context has enough quality for LLM-grounded reasoning" },
   "resolver_recommendation": { "group": "IT Support", "confidence": 1.0, "source": "retrieval_consensus" },
+  "rag_evidence": {
+    "quality_score": 1.0,
+    "quality_band": "cache_ready",
+    "top_similarity": 1.0,
+    "average_similarity": 0.88,
+    "category_consensus": 0.92,
+    "resolution_coverage": 1.0,
+    "evidence_count": 5,
+    "dominant_category": "Application"
+  },
   "route_explanation": [
-    { "label": "Nearest approved ticket", "value": "INC00491 at 1.00", "impact": "semantic cache branch selected" }
+    { "label": "RAG evidence pack", "value": "cache_ready at 1.00", "impact": "5 approved tickets; category consensus 0.92" }
   ]
 }
 ```
@@ -387,10 +395,10 @@ Expected behavior:
 - Ticket is categorized.
 - Similar historical tickets are retrieved.
 - Known incidents return the matched approved resolution through the semantic cache fast path.
-- Similar but not identical incidents use generative RAG and verifier scoring.
-- Out-of-distribution tickets escalate without model generation.
+- Similar but not identical incidents use LLM-orchestrated RAG with the scored evidence pack attached.
+- Out-of-scope or high-risk tickets are sent to the LLM with RAG evidence, and the LLM marks human review when it cannot safely resolve them.
 - Confidence components are returned.
-- Ticket escalates if confidence is low.
+- Ticket escalates when the LLM decision marks human review as required.
 
 After the call, refresh the frontend. The new ticket should appear across Dashboard, Ticket Stream, Search, Knowledge Base, Privacy Audit if redactions occurred, and Human Review if the backend marked it for escalation.
 
@@ -453,7 +461,7 @@ Evaluate the live backend:
 python services/agent-api/app/scripts/evaluate_ticket_set.py --input data/eval_ticket_set_100.json --output output/evaluation/full_100_ticket_results.json
 ```
 
-The evaluator posts each ticket to `/v1/tickets/route` and compares the backend decision against the expected `auto_resolution` or `human_review` label. The latest local Docker run scored `100/100` decision accuracy: 40/40 easy, 20/20 medium, and 40/40 hard.
+The evaluator posts each ticket to `/v1/tickets/route` and compares the backend decision against the expected `auto_resolution` or `human_review` label. A perfect score on this synthetic evaluator should be treated as a structural smoke-test result, not as proof of production accuracy; the manual 50-ticket benchmark is the better check for cache behavior, RAG evidence, and LLM escalation choices.
 
 ## Repository Layout
 
@@ -504,7 +512,7 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 1. Open [http://localhost:8081](http://localhost:8081).
 2. Start on **Dashboard**. With a clean database, every reading should be zero and the recent-ticket table should be empty.
 3. Submit a ticket from **Routing Desk** or call `POST /v1/tickets/route`.
-4. Explain the agent nodes: privacy, retrieval, triage, generation, verifier, and escalation.
+4. Explain the agent nodes: privacy, retrieval, RAG evidence scoring, assessment, triage, LLM resolution decision, and escalation.
 5. Open **Ticket Stream** to show the new backend ticket.
 6. Open **Search** and click the ticket to inspect the full detail page.
 7. Open **Privacy Audit** to show redaction evidence when the ticket contains sensitive values.

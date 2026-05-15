@@ -49,6 +49,8 @@ class ClickHouseRepository:
             username=settings.clickhouse_user,
             password=settings.clickhouse_password,
             database=settings.clickhouse_database,
+            connect_timeout=settings.clickhouse_connect_timeout_seconds,
+            send_receive_timeout=settings.clickhouse_send_receive_timeout_seconds,
             autogenerate_session_id=False,
         )
         if not ClickHouseRepository._schema_checked:
@@ -90,6 +92,11 @@ class ClickHouseRepository:
 
     def ping(self) -> bool:
         return self.client.command("SELECT 1") == 1
+
+    def close(self) -> None:
+        close = getattr(self.client, "close", None)
+        if callable(close):
+            close()
 
     def insert_tickets(self, tickets: list[TicketRecord]) -> None:
         if not tickets:
@@ -142,12 +149,13 @@ class ClickHouseRepository:
                 resolution,
                 source,
                 1 - cosineDistance(embedding, %(embedding)s) AS similarity,
-                if(source != 'api' AND assignment_group != 'Pending Review' AND length(trim(resolution)) > 0, 1, 0) AS approved,
-                if(similarity >= %(fast_threshold)s AND approved = 1, 1, 0) AS fast_candidate
+                if(similarity >= %(fast_threshold)s, 1, 0) AS fast_candidate
             FROM tickets
             WHERE length(embedding) = %(dim)s
-              AND NOT (source = 'api' AND assignment_group = 'Pending Review')
-            ORDER BY fast_candidate DESC, similarity DESC, approved DESC, created_at ASC, ticket_id ASC
+              AND source IN %(approved_sources)s
+              AND assignment_group != 'Pending Review'
+              AND length(trim(resolution)) > 0
+            ORDER BY fast_candidate DESC, similarity DESC, created_at ASC, ticket_id ASC
             LIMIT %(limit)s
             """,
             parameters={
@@ -155,6 +163,7 @@ class ClickHouseRepository:
                 "dim": self.settings.embedding_dim,
                 "limit": limit,
                 "fast_threshold": self.settings.fast_path_similarity_threshold,
+                "approved_sources": self.settings.approved_knowledge_source_values,
             },
         )
         return [

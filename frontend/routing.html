@@ -99,9 +99,9 @@
     </summary>
     <div class="thresh-ref">
       <span><strong>Semantic cache</strong> similarity ≥ 0.95</span>
-      <span><strong>RAG path</strong> similarity 0.70–0.95</span>
-      <span><strong>OOD</strong> similarity &lt; 0.70</span>
-      <span><strong>Verifier gate</strong> score ≥ 0.70</span>
+      <span><strong>LLM-RAG path</strong> similarity &lt; 0.95</span>
+      <span><strong>RAG evidence</strong> scored before LLM decision</span>
+      <span><strong>LLM decision</strong> decides human review</span>
       <span><strong>Routing confidence</strong> score ≥ 0.85</span>
       <span><strong>Privacy gate</strong> risk ≤ 0.15</span>
     </div>
@@ -251,7 +251,7 @@ function renderResult(r) {
   const ver  = r.verifier_score ?? null;
   const priv = r.privacy_risk != null ? (1 - r.privacy_risk) : null;
   const weightedSignal = [clf,ret,ver,priv].every(v=>v==null) ? null :
-    ((clf||0)*.35 + (ret||0)*.25 + (ver||0)*.30 + (priv||0)*.10);
+    ((clf||0)*.20 + (ret||0)*.20 + (ver||0)*.50 + (priv||0)*.10);
   const finalConfidence = r.confidence_score;
   const finalColor = finalConfidence == null ? 'var(--text3)' : finalConfidence<.65?'var(--critical)':finalConfidence<.85?'var(--warn)':'var(--ok)';
 
@@ -268,13 +268,13 @@ function renderResult(r) {
           <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${weightedSignal==null?'var(--text3)':weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${weightedSignal!=null?Math.round(weightedSignal*100)+'%':'—'}</div>
         </div>
       </div>
-      ${animatedBar('Classification Confidence', clf,  .65, '0.65', '0.35', 0.05)}
-      ${animatedBar('Retrieval Similarity',      ret,  .70, '0.70', '0.25', 0.12)}
-      ${animatedBar('Verifier Score',            ver,  .70, '0.70', '0.30', 0.19)}
+      ${animatedBar('Classification Confidence', clf,  .65, '0.65', '0.20', 0.05)}
+      ${animatedBar('RAG Evidence',              ret,  .70, '0.70', '0.20', 0.12)}
+      ${animatedBar('LLM Decision Score',        ver,  .70, '0.70', '0.50', 0.19)}
       ${animatedBar('Privacy Safety',            priv, .85, '0.85 (risk≤0.15)', '0.10', 0.26)}
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:11px;margin-top:4px">
         <span style="color:var(--text3)">Formula: </span>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">0.35·clf + 0.25·ret + 0.30·ver + 0.10·privacy</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">0.20·clf + 0.20·rag + 0.50·llm + 0.10·privacy</span>
         ${weightedSignal!=null?`<span style="float:right;font-weight:700;font-family:var(--mono);color:${weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${Math.round(weightedSignal*100)}%</span>`:''}
       </div>
       <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-top:6px">Final backend confidence is authoritative. The weighted signal is shown for auditability; route gates can lower the final score.</div>
@@ -299,7 +299,7 @@ function renderResult(r) {
       ${staggeredStep(2,'Retrieval',retColor,[
         ['Matched ticket',   r.matched_ticket_id||'—'],
         ['Retrieval sim.',   fmtNum(r.retrieval_similarity,3)],
-        ['Branch signal',    !r.retrieval_similarity?'—':r.retrieval_similarity>=.95?'→ Cache':r.retrieval_similarity>=.70?'→ RAG':'→ OOD'],
+        ['Branch signal',    !r.retrieval_similarity?'—':r.retrieval_similarity>=.95?'→ Cache':'→ LLM-RAG'],
       ],false,0.08)}
       ${staggeredStep(3,'Assessment',assColor,[
         ['Route path',       r.route_path?.replace(/_/g,' ')||'—'],
@@ -311,7 +311,7 @@ function renderResult(r) {
         ['Escalation flag',  r.escalation_required?'⚠ Yes':'No'],
       ],false,0.24)}
       ${staggeredStep(5,'Final Decision',verColor,[
-        ['Verifier score',   fmtNum(r.verifier_score,3)],
+        ['LLM decision score', fmtNum(r.verifier_score,3)],
         ['Confidence',       r.confidence_score!=null?Math.round(r.confidence_score*100)+'%':'—'],
         ['Final status',     r.escalation_required?'Escalated to Human':'Auto-completed'],
       ],true,0.32)}

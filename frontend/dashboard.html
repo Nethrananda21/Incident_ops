@@ -493,7 +493,7 @@
     const ROUTES = [
       { key: 'semantic_cache', label: 'Semantic cache', short: 'Cache hit', color: '#1D9E75' },
       { key: 'generative_rag', label: 'Generative RAG', short: 'AI-generated', color: '#378ADD' },
-      { key: 'out_of_distribution', label: 'Out of range', short: 'Out of range', color: '#BA7517' },
+      { key: 'out_of_distribution', label: 'Legacy weak evidence', short: 'Legacy', color: '#BA7517' },
       { key: 'human_review_required', alt: 'human_review', label: 'Human review', short: 'Human review', color: '#E24B4A' },
     ];
     const intervals = [];
@@ -811,8 +811,8 @@
       if (r.confidence_components?.retrieval_similarity != null || r.retrieval_similarity != null) rows.push(['#378ADD', 'Similar ticket search', `${Math.round(safeNum(r.confidence_components?.retrieval_similarity ?? r.retrieval_similarity) * 100)}% match`]);
       if (r.route_path === 'semantic_cache') rows.push(['#1D9E75', 'Cache match found', r.matched_ticket_id || 'matched']);
       if (r.route_path === 'generative_rag') rows.push(['#378ADD', 'AI wrote a resolution', 'generated']);
-      if (r.route_path === 'out_of_distribution') rows.push(['#BA7517', 'No match — escalating', 'out of range']);
-      if (r.confidence_components?.verifier_score != null || r.verifier_score != null) rows.push(['#7c3aed', 'Answer quality check', `${Math.round(safeNum(r.confidence_components?.verifier_score ?? r.verifier_score) * 100)}%`]);
+      if (r.route_path === 'out_of_distribution') rows.push(['#BA7517', 'Legacy weak-evidence route', 'review']);
+      if (r.confidence_components?.verifier_score != null || r.verifier_score != null) rows.push(['#7c3aed', 'LLM decision confidence', `${Math.round(safeNum(r.confidence_components?.verifier_score ?? r.verifier_score) * 100)}%`]);
       rows.push([r.escalation_required ? '#E24B4A' : '#1D9E75', r.escalation_required ? 'Sent to human review' : 'Auto-resolved', r.escalation_required ? 'needs review' : 'complete']);
       document.getElementById('last-trace').innerHTML = rows.map(row => `
         <div class="trace-row"><span class="trace-dot" style="background:${row[0]}"></span><div>${html(row[1])}</div><div class="trace-outcome">${html(row[2])}</div></div>
@@ -828,9 +828,9 @@
         privacy_score: safeNum(c.privacy_score ?? (c.privacy_risk != null ? 1 - c.privacy_risk : 0)),
       };
       const rows = [
-        ['Classification', '35%', values.classification_confidence, '#1D9E75'],
-        ['Similar ticket match', '25%', values.retrieval_similarity, '#378ADD'],
-        ['Answer quality', '30%', values.verifier_score, '#7c3aed'],
+        ['Classification', '20%', values.classification_confidence, '#1D9E75'],
+        ['RAG evidence', '20%', values.retrieval_similarity, '#378ADD'],
+        ['LLM decision', '50%', values.verifier_score, '#7c3aed'],
         ['Privacy safety', '10%', values.privacy_score, '#BA7517'],
       ];
       const overall = detail?.routing?.confidence_score ?? d.avgConfidence;
@@ -842,7 +842,7 @@
           <div class="bar-track"><span class="bar-fill" style="width:${clamp(p, 0, 100)}%;background:${color}"></span></div>
           <div class="bar-num">${p}%</div>
         </div>`;
-      }).join('') + `<div class="formula">Final score = (classification × 0.35) + (match × 0.25) + (quality × 0.30) + (privacy × 0.10)</div>
+      }).join('') + `<div class="formula">Final score = (classification × 0.20) + (RAG evidence × 0.20) + (LLM decision × 0.50) + (privacy × 0.10)</div>
       <div class="overall-score" style="color:${confidenceColor(overallPct)}">Overall: ${overallPct}%</div>`;
     }
 

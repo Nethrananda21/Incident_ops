@@ -2,12 +2,17 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import time
 from collections import defaultdict
 from functools import lru_cache
+from uuid import uuid4
 
-from fastapi import FastAPI, HTTPException, Query
-from fastapi.responses import PlainTextResponse, StreamingResponse
+from fastapi import FastAPI, HTTPException, Query, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.trustedhost import TrustedHostMiddleware
+from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
 from app.agent import RoutingAgent
 from app.clickhouse_repo import ClickHouseRepository
@@ -15,17 +20,34 @@ from app.config import get_settings
 from app.llm import NvidiaLLM
 from app.schemas import ReviewDecision, RouteResponse, TicketRequest
 
+settings = get_settings()
+logging.basicConfig(
+    level=getattr(logging, settings.log_level.upper(), logging.INFO),
+    format="%(asctime)s %(levelname)s %(name)s %(message)s",
+)
+LOGGER = logging.getLogger("incidentops.api")
+
 app = FastAPI(
-    title="Agentic Routing & Privacy Pipeline",
-    version="0.1.0",
+    title=settings.app_name,
+    version=settings.app_version,
     description="Privacy-first enterprise ticket routing and resolution API.",
 )
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=settings.cors_origins,
+    allow_credentials=False,
+    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
+)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_patterns)
 
 REQUEST_COUNT = 0
 ERROR_COUNT = 0
+REQUEST_LATENCY_TOTAL_SECONDS = 0.0
 STARTED_AT = time.time()
 
 
+@lru_cache
 def get_repo() -> ClickHouseRepository:
     return ClickHouseRepository(get_settings())
 
@@ -34,6 +56,99 @@ def get_repo() -> ClickHouseRepository:
 def get_agent() -> RoutingAgent:
     settings = get_settings()
     return RoutingAgent(settings=settings, repo=get_repo(), llm=NvidiaLLM(settings))
+
+
+def add_operational_headers(response, request_id: str) -> None:
+    response.headers["X-Request-ID"] = request_id
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["Referrer-Policy"] = "no-referrer"
+    response.headers["Cache-Control"] = "no-store"
+
+
+def secure_json_response(payload: dict, *, status_code: int, request_id: str) -> JSONResponse:
+    response = JSONResponse(payload, status_code=status_code)
+    add_operational_headers(response, request_id)
+    return response
+
+
+def safe_validation_errors(exc: RequestValidationError) -> list[dict]:
+    errors = []
+    for item in exc.errors():
+        cleaned = dict(item)
+        cleaned.pop("input", None)
+        errors.append(cleaned)
+    return errors
+
+
+@app.middleware("http")
+async def operational_middleware(request: Request, call_next):
+    global REQUEST_COUNT, ERROR_COUNT, REQUEST_LATENCY_TOTAL_SECONDS
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    request.state.request_id = request_id
+
+    content_length = request.headers.get("content-length")
+    if content_length:
+        try:
+            content_length_value = int(content_length)
+        except ValueError:
+            content_length_value = 0
+    else:
+        content_length_value = 0
+    if content_length_value > settings.max_request_body_bytes:
+        ERROR_COUNT += 1
+        return secure_json_response(
+            {"detail": "request body too large", "request_id": request_id},
+            status_code=413,
+            request_id=request_id,
+        )
+
+    REQUEST_COUNT += 1
+    start = time.perf_counter()
+    response = await call_next(request)
+    elapsed = time.perf_counter() - start
+    REQUEST_LATENCY_TOTAL_SECONDS += elapsed
+    if response.status_code >= 500:
+        ERROR_COUNT += 1
+    add_operational_headers(response, request_id)
+    LOGGER.info(
+        "request completed",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": round(elapsed * 1000, 2),
+        },
+    )
+    return response
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    payload = {"detail": exc.detail, "request_id": request_id}
+    return secure_json_response(payload, status_code=exc.status_code, request_id=request_id)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    return secure_json_response(
+        {"detail": "invalid request payload", "errors": safe_validation_errors(exc), "request_id": request_id},
+        status_code=422,
+        request_id=request_id,
+    )
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    request_id = getattr(request.state, "request_id", str(uuid4()))
+    LOGGER.exception("unhandled API error", extra={"request_id": request_id})
+    return secure_json_response(
+        {"detail": "internal server error", "request_id": request_id},
+        status_code=500,
+        request_id=request_id,
+    )
 
 
 @app.get("/v1/health")
@@ -55,24 +170,52 @@ def health() -> dict:
     }
 
 
+@app.get("/v1/live")
+def live() -> dict:
+    uptime = int(time.time() - STARTED_AT)
+    return {"status": "ok", "uptime_seconds": uptime, "version": get_settings().app_version}
+
+
+@app.get("/v1/ready")
+def ready() -> JSONResponse:
+    settings = get_settings()
+    repo_ok = False
+    try:
+        repo_ok = get_repo().ping()
+    except Exception:
+        LOGGER.exception("readiness check failed")
+    payload = {
+        "status": "ready" if repo_ok else "not_ready",
+        "clickhouse": repo_ok,
+        "nvidia_configured": bool(settings.nvidia_api_key),
+        "model": settings.nvidia_llm_model,
+    }
+    return JSONResponse(payload, status_code=200 if repo_ok else 503)
+
+
 @app.get("/metrics", response_class=PlainTextResponse)
 def metrics() -> str:
+    avg_latency = REQUEST_LATENCY_TOTAL_SECONDS / REQUEST_COUNT if REQUEST_COUNT else 0.0
     return (
         f"agent_api_requests_total {REQUEST_COUNT}\n"
         f"agent_api_errors_total {ERROR_COUNT}\n"
+        f"agent_api_request_latency_seconds_sum {REQUEST_LATENCY_TOTAL_SECONDS:.6f}\n"
+        f"agent_api_request_latency_seconds_avg {avg_latency:.6f}\n"
         f"agent_api_uptime_seconds {int(time.time() - STARTED_AT)}\n"
     )
 
 
 @app.post("/v1/tickets/route", response_model=RouteResponse)
 async def route_ticket(request: TicketRequest) -> dict:
-    global REQUEST_COUNT, ERROR_COUNT
-    REQUEST_COUNT += 1
+    settings = get_settings()
     try:
-        return await get_agent().route(request)
+        return await asyncio.wait_for(get_agent().route(request), timeout=settings.route_timeout_seconds)
+    except asyncio.TimeoutError as exc:
+        LOGGER.warning("ticket routing timed out")
+        raise HTTPException(status_code=504, detail="ticket routing timed out") from exc
     except Exception as exc:
-        ERROR_COUNT += 1
-        raise HTTPException(status_code=500, detail=f"routing failed: {exc}") from exc
+        LOGGER.exception("ticket routing failed")
+        raise HTTPException(status_code=500, detail="ticket routing failed") from exc
 
 
 @app.get("/v1/dashboard")
@@ -574,9 +717,9 @@ def routing_intelligence(limit: int = Query(default=500, ge=50, le=2000)) -> dic
             risk_level_value = row[20] or risk_level(risk_score)
         knowledge_gap = bool(row[23]) or float(row[10]) < settings.rag_similarity_threshold or float(row[11]) < 0.70
         knowledge_reason = row[24] or (
-            "retrieval or verifier score is below production threshold"
+            "stored RAG evidence or LLM decision confidence is below production threshold"
             if knowledge_gap
-            else "approved context and verifier signal are sufficient"
+            else "approved context and LLM decision confidence are sufficient"
         )
         resolver_confidence = float(row[22])
         if resolver_confidence <= 0 and row[21] and row[21] != row[3]:
@@ -650,12 +793,12 @@ def routing_intelligence(limit: int = Query(default=500, ge=50, le=2000)) -> dic
                 "fast_path_similarity": settings.fast_path_similarity_threshold,
                 "rag_similarity": settings.rag_similarity_threshold,
                 "confidence": settings.routing_confidence_threshold,
-                "verifier": 0.70,
+                "llm_decision_confidence": 0.70,
             },
             "controls": [
                 "privacy redaction before retrieval and model calls",
-                "semantic cache bypass for approved near-duplicate incidents",
-                "OOD escalation before generation when retrieval is weak",
+                "semantic cache bypass only for approved near-duplicate incidents at >=0.95",
+                "LLM decision required for every non-cache ticket with scored RAG evidence attached",
                 "immutable human-review feedback events",
             ],
         },
@@ -951,9 +1094,9 @@ def ticket_detail(ticket_id: str) -> dict:
             or (decision[9] == "generative_rag" and float(decision[6]) < 0.70)
         )
         knowledge_reason = decision[19] or (
-            "retrieval or verifier score is below production threshold"
+            "stored RAG evidence or LLM decision confidence is below production threshold"
             if knowledge_gap
-            else "approved context and verifier signal are sufficient"
+            else "approved context and LLM decision confidence are sufficient"
         )
         resolver_group = decision[16] or (matched_ticket or {}).get("assignment_group") or ticket[6] or "Unassigned"
         resolver_confidence = float(decision[17]) if float(decision[17]) > 0 else (float(decision[5]) if matched_ticket else 0.0)
@@ -1344,9 +1487,9 @@ def build_route_explanation(
     if semantic_cache_hit:
         route_impact = "approved historical resolution returned without invoking the LLM"
     elif escalation_required:
-        route_impact = "confidence or policy gates require human review before remediation"
+        route_impact = "LLM decision requires human review before remediation"
     else:
-        route_impact = "retrieved context was sent through generation and verifier gates"
+        route_impact = "retrieved context was attached to the prompt and resolved by the LLM"
     return [
         {
             "label": "Privacy gate",
@@ -1356,7 +1499,7 @@ def build_route_explanation(
         {
             "label": "Nearest approved ticket",
             "value": f"{matched_ticket_id or 'none'} at {retrieval_similarity:.2f}",
-            "impact": "similarity determines fast path, generative RAG, or OOD escalation",
+            "impact": "similarity only controls the >=0.95 semantic cache bypass; otherwise the LLM decides",
         },
         {
             "label": "Route branch",
@@ -1371,7 +1514,7 @@ def build_route_explanation(
         {
             "label": "SLA risk",
             "value": f"{sla_risk_level} at {sla_risk_score:.2f}",
-            "impact": "priority, confidence, retrieval gap, verifier gap, and privacy risk combined",
+            "impact": "priority, confidence, retrieval gap, LLM confidence gap, and privacy risk combined",
         },
         {
             "label": "Knowledge coverage",

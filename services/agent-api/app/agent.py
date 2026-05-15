@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import time
+import logging
 from collections import Counter
 from typing import TypedDict
 
@@ -14,6 +15,8 @@ from app.llm import NvidiaLLM
 from app.privacy import redact_text
 from app.schemas import TicketRequest
 
+LOGGER = logging.getLogger(__name__)
+
 
 class AgentState(TypedDict, total=False):
     request: TicketRequest
@@ -24,6 +27,7 @@ class AgentState(TypedDict, total=False):
     privacy_audit: dict
     retrieved: list[RetrievedTicket]
     fast_path_match: RetrievedTicket | None
+    rag_evidence: dict
     assigned_category: str
     classification_confidence: float
     retrieval_similarity: float
@@ -43,6 +47,7 @@ class AgentState(TypedDict, total=False):
     knowledge_gap: dict
     resolver_recommendation: dict
     route_explanation: list[dict[str, str]]
+    escalation_rationale: str
 
 
 class RoutingAgent:
@@ -50,7 +55,7 @@ class RoutingAgent:
         self.settings = settings
         self.repo = repo
         self.llm = llm
-        self.graph = self._build_graph()
+        self.workflow = self._build_workflow()
 
     async def route(self, request: TicketRequest) -> dict:
         started = time.perf_counter()
@@ -60,48 +65,48 @@ class RoutingAgent:
             "raw_text": raw_text,
             "agent_state": "started",
         }
-        state = await self.graph.ainvoke(initial_state)
+        state = await self._run_workflow(initial_state)
         state["routing_latency_ms"] = int((time.perf_counter() - started) * 1000)
         response = self._to_response(state)
-        self.repo.insert_routing_decision(response | {"model_name": self.settings.nvidia_llm_model})
         self._store_ticket(request, state)
+        self.repo.insert_routing_decision(response | {"model_name": self.settings.nvidia_llm_model})
         return response
 
-    def _build_graph(self):
+    async def _run_workflow(self, state: AgentState) -> AgentState:
+        return await self.workflow.ainvoke(state)
+
+    def _build_workflow(self):
         graph = StateGraph(AgentState)
         graph.add_node("privacy", self._privacy_node)
         graph.add_node("retrieve", self._retrieve_node)
+        graph.add_node("evidence", self._evidence_node)
         graph.add_node("assess", self._assessment_node)
-        graph.add_node("fast_path", self._fast_path_node)
-        graph.add_node("policy_escalate", self._policy_escalation_node)
-        graph.add_node("ood_escalate", self._ood_escalation_node)
+        graph.add_node("semantic_cache", self._fast_path_node)
         graph.add_node("triage", self._triage_node)
-        graph.add_node("generate", self._generate_node)
-        graph.add_node("verify", self._verify_node)
+        graph.add_node("llm_resolution", self._llm_resolution_node)
         graph.add_node("escalate", self._escalate_node)
 
         graph.set_entry_point("privacy")
         graph.add_edge("privacy", "retrieve")
-        graph.add_edge("retrieve", "assess")
+        graph.add_edge("retrieve", "evidence")
+        graph.add_edge("evidence", "assess")
         graph.add_conditional_edges(
             "assess",
-            self._route_after_retrieval,
+            self._select_after_assessment,
             {
-                "fast_path": "fast_path",
-                "generative_rag": "triage",
-                "policy_escalate": "policy_escalate",
-                "ood_escalate": "ood_escalate",
+                "semantic_cache": "semantic_cache",
+                "llm_resolution": "triage",
             },
         )
-        graph.add_edge("fast_path", END)
-        graph.add_edge("policy_escalate", END)
-        graph.add_edge("ood_escalate", END)
-        graph.add_edge("triage", "generate")
-        graph.add_edge("generate", "verify")
+        graph.add_edge("semantic_cache", END)
+        graph.add_edge("triage", "llm_resolution")
         graph.add_conditional_edges(
-            "verify",
+            "llm_resolution",
             self._should_escalate,
-            {"escalate": "escalate", "complete": END},
+            {
+                "escalate": "escalate",
+                "complete": END,
+            },
         )
         graph.add_edge("escalate", END)
         return graph.compile()
@@ -114,23 +119,26 @@ class RoutingAgent:
         payload["bypass_redpanda"] = True
         payload["return_sanitized"] = True
         try:
-            async with httpx.AsyncClient(timeout=3.0) as client:
+            timeout = httpx.Timeout(self.settings.privacy_timeout_seconds)
+            async with httpx.AsyncClient(timeout=timeout) as client:
                 resp = await client.post(f"{self.settings.privacy_shield_url}/v1/ingest/stream", json=payload)
                 resp.raise_for_status()
                 data = resp.json()
+                findings = data.get("findings") or []
                 state["ticket_id"] = data["ticket_id"]
                 state["sanitized_text"] = data["sanitized_text"]
-                state["redacted_count"] = len(data.get("findings", []))
+                state["redacted_count"] = len(findings)
                 state["privacy_audit"] = {
                     "stream_id": data["stream_id"],
                     "ticket_id": data["ticket_id"],
                     "raw_sha256": data["raw_sha256"],
                     "sanitized_sha256": data["sanitized_sha256"],
-                    "findings": data.get("findings", []),
+                    "findings": findings,
                     "detector_version": data["detector_version"],
                     "policy_version": data["policy_version"],
                 }
-        except Exception:
+        except (httpx.HTTPError, KeyError, ValueError) as exc:
+            LOGGER.warning("privacy service unavailable; using local redaction fallback: %s", exc.__class__.__name__)
             fallback = redact_text(raw_text)
             state["ticket_id"] = request.ticket_id or request.number or fallback.sanitized_sha256[:16]
             state["sanitized_text"] = fallback.sanitized_text
@@ -181,6 +189,11 @@ class RoutingAgent:
         state["agent_state"] = "retrieval_complete"
         return state
 
+    async def _evidence_node(self, state: AgentState) -> AgentState:
+        state["rag_evidence"] = self._build_rag_evidence(state)
+        state["agent_state"] = "evidence_complete"
+        return state
+
     async def _assessment_node(self, state: AgentState) -> AgentState:
         review_reason = self._human_review_reason(state)
         if review_reason:
@@ -208,46 +221,6 @@ class RoutingAgent:
         state["agent_state"] = "semantic_cache_hit"
         return state
 
-    async def _ood_escalation_node(self, state: AgentState) -> AgentState:
-        category, confidence = keyword_category(state["sanitized_text"])
-        privacy_risk = self._privacy_risk(state)
-        state["assigned_category"] = normalize_category(category)
-        state["classification_confidence"] = round(float(confidence), 4)
-        state["verifier_score"] = 0.0
-        state["privacy_risk"] = privacy_risk
-        state["confidence_score"] = round(max(0.0, min(1.0, 0.25 * state.get("retrieval_similarity", 0.0))), 4)
-        state["suggested_resolution"] = [
-            "Escalate to a human reviewer: no sufficiently similar historical ticket was found.",
-            "Collect affected system, timestamps, recent changes, logs, screenshots, and business impact before assigning a fix.",
-        ]
-        state["escalation_required"] = True
-        state["route_path"] = "out_of_distribution"
-        state["semantic_cache_hit"] = False
-        state["knowledge_gap"] = self._knowledge_gap_signal(state)
-        self._refresh_operational_metadata(state)
-        state["agent_state"] = "ood_escalated"
-        return state
-
-    async def _policy_escalation_node(self, state: AgentState) -> AgentState:
-        category, confidence = keyword_category(state["sanitized_text"])
-        privacy_risk = self._privacy_risk(state)
-        state["assigned_category"] = normalize_category(category)
-        state["classification_confidence"] = round(float(confidence), 4)
-        state["verifier_score"] = 0.0
-        state["privacy_risk"] = privacy_risk
-        state["confidence_score"] = round(max(0.0, min(1.0, 0.35 * confidence + 0.25 * state.get("retrieval_similarity", 0.0))), 4)
-        state["suggested_resolution"] = [
-            f"Escalate to a human reviewer: {state.get('review_reason') or 'high-risk ticket policy matched'}.",
-            "Preserve evidence, confirm business impact, identify the accountable owner, and require approved change or incident response handling before remediation.",
-        ]
-        state["escalation_required"] = True
-        state["route_path"] = "human_review_required"
-        state["semantic_cache_hit"] = False
-        state["knowledge_gap"] = self._knowledge_gap_signal(state)
-        self._refresh_operational_metadata(state)
-        state["agent_state"] = "policy_escalated"
-        return state
-
     async def _triage_node(self, state: AgentState) -> AgentState:
         retrieved = state.get("retrieved", [])
         if retrieved:
@@ -266,66 +239,51 @@ class RoutingAgent:
         state["agent_state"] = "triage_complete"
         return state
 
-    async def _generate_node(self, state: AgentState) -> AgentState:
-        state["suggested_resolution"] = self.llm.generate_resolution(
+    async def _llm_resolution_node(self, state: AgentState) -> AgentState:
+        request = state["request"]
+        decision = self.llm.resolve_and_decide(
             ticket_text=state["sanitized_text"],
             category=state["assigned_category"],
             retrieved=state.get("retrieved", []),
-        )
-        state["agent_state"] = "generation_complete"
-        return state
-
-    async def _verify_node(self, state: AgentState) -> AgentState:
-        verification = self.llm.verify(
-            ticket_text=state["sanitized_text"],
-            resolution=state.get("suggested_resolution", []),
-            retrieved=state.get("retrieved", []),
+            rag_evidence=state.get("rag_evidence", {}),
+            urgency=request.urgency,
+            impact=request.impact,
+            policy_signal=state.get("review_reason"),
         )
         privacy_risk = self._privacy_risk(state)
+        decision_confidence = round(decision.confidence_score, 4)
         confidence = (
-            0.35 * state.get("classification_confidence", 0.0)
-            + 0.25 * max(0.0, state.get("retrieval_similarity", 0.0))
-            + 0.30 * verification.score
+            0.20 * state.get("classification_confidence", 0.0)
+            + 0.20 * max(0.0, state.get("retrieval_similarity", 0.0))
+            + 0.50 * decision_confidence
             + 0.10 * (1.0 - privacy_risk)
         )
-        state["verifier_score"] = round(verification.score, 4)
+        state["suggested_resolution"] = decision.resolution_steps
+        state["escalation_required"] = decision.escalation_required
+        state["escalation_rationale"] = decision.rationale
+        state["verifier_score"] = decision_confidence
         state["privacy_risk"] = round(privacy_risk, 4)
         state["confidence_score"] = round(max(0.0, min(1.0, confidence)), 4)
-        grounded_resolution = (
-            state.get("retrieval_similarity", 0.0) >= self.settings.rag_similarity_threshold
-            and verification.score >= 0.70
-            and privacy_risk <= 0.15
-        )
-        state["escalation_required"] = (
-            not grounded_resolution
-            and (
-                state["confidence_score"] < self.settings.routing_confidence_threshold
-                or state.get("retrieval_similarity", 0.0) < self.settings.rag_similarity_threshold
-                or verification.score < 0.70
-            )
-        )
+        state["route_path"] = "human_review_required" if decision.escalation_required else "generative_rag"
+        state["semantic_cache_hit"] = False
         state["knowledge_gap"] = self._knowledge_gap_signal(state)
         self._refresh_operational_metadata(state)
-        state["agent_state"] = "verification_complete"
+        state["agent_state"] = "llm_decision_complete"
         return state
 
     async def _escalate_node(self, state: AgentState) -> AgentState:
         state["agent_state"] = "escalated"
+        self._refresh_operational_metadata(state)
         return state
 
-    def _route_after_retrieval(self, state: AgentState) -> str:
-        similarity = state.get("retrieval_similarity", 0.0)
-        if state.get("review_reason"):
-            return "policy_escalate"
+    def _select_after_assessment(self, state: AgentState) -> str:
         if state.get("fast_path_match") is not None:
-            return "fast_path"
-        if similarity >= self.settings.rag_similarity_threshold:
-            return "generative_rag"
-        return "ood_escalate"
+            return "semantic_cache"
+        return "llm_resolution"
 
     def _is_fast_path_eligible(self, ticket: RetrievedTicket) -> bool:
         return (
-            ticket.source != "api"
+            ticket.source in self.settings.approved_knowledge_source_values
             and ticket.assignment_group != "Pending Review"
             and bool(ticket.resolution.strip())
         )
@@ -337,26 +295,118 @@ class RoutingAgent:
         return round(min(0.4, state.get("redacted_count", 0) * 0.05), 4)
 
     def _knowledge_gap_signal(self, state: AgentState) -> dict:
+        evidence = state.get("rag_evidence", {})
+        quality_band = evidence.get("quality_band")
         similarity = state.get("retrieval_similarity", 0.0)
         verifier = state.get("verifier_score")
         route_path = state.get("route_path", "retrieved")
-        if similarity < self.settings.rag_similarity_threshold:
-            severity = "critical" if similarity < 0.50 else "elevated"
+        if quality_band in {"none", "weak"}:
+            severity = "critical" if quality_band == "none" or similarity < 0.50 else "elevated"
             return {
                 "is_gap": True,
-                "reason": "nearest approved ticket is below the RAG similarity threshold",
+                "reason": f"RAG evidence quality is {quality_band}; LLM must treat retrieved context as low-confidence support",
                 "severity": severity,
             }
         if verifier is not None and verifier < 0.70 and route_path == "generative_rag":
             return {
                 "is_gap": True,
-                "reason": "generated resolution failed verifier grounding threshold",
+                "reason": "LLM decision confidence is below grounding threshold",
                 "severity": "elevated",
             }
         return {
             "is_gap": False,
-            "reason": "approved historical context is sufficient for this route",
+            "reason": "approved historical context has enough quality for LLM-grounded reasoning",
             "severity": "normal",
+        }
+
+    def _build_rag_evidence(self, state: AgentState) -> dict:
+        retrieved = state.get("retrieved", [])
+        fast_threshold = getattr(self.settings, "fast_path_similarity_threshold", 0.95)
+        rag_threshold = getattr(self.settings, "rag_similarity_threshold", 0.70)
+        if not retrieved:
+            return {
+                "quality_score": 0.0,
+                "quality_band": "none",
+                "top_similarity": 0.0,
+                "average_similarity": 0.0,
+                "category_consensus": 0.0,
+                "resolution_coverage": 0.0,
+                "evidence_count": 0,
+                "dominant_category": None,
+                "items": [],
+                "policy": "No approved retrieved evidence was available; the LLM must decide from the sanitized ticket and escalate when not grounded.",
+            }
+
+        similarities = [max(0.0, min(1.0, item.similarity)) for item in retrieved]
+        top_similarity = similarities[0]
+        average_similarity = sum(similarities) / len(similarities)
+        top3_average = sum(similarities[:3]) / min(len(similarities), 3)
+        resolution_count = sum(1 for item in retrieved if item.resolution.strip())
+        resolution_coverage = resolution_count / len(retrieved)
+
+        category_weights: Counter[str] = Counter()
+        for item in retrieved:
+            category_weights[normalize_category(item.category)] += max(item.similarity, 0.0)
+        dominant_category, dominant_weight = category_weights.most_common(1)[0]
+        total_weight = sum(category_weights.values()) or 1.0
+        category_consensus = dominant_weight / total_weight
+
+        quality_score = round(
+            max(
+                0.0,
+                min(
+                    1.0,
+                    0.45 * top_similarity
+                    + 0.20 * top3_average
+                    + 0.20 * category_consensus
+                    + 0.15 * resolution_coverage,
+                ),
+            ),
+            4,
+        )
+        if state.get("fast_path_match") is not None and top_similarity >= fast_threshold:
+            quality_band = "cache_ready"
+        elif top_similarity >= rag_threshold and category_consensus >= 0.45 and resolution_coverage >= 0.80:
+            quality_band = "strong"
+        elif top_similarity >= 0.50 and resolution_coverage >= 0.50:
+            quality_band = "usable"
+        else:
+            quality_band = "weak"
+
+        items = []
+        fast_match = state.get("fast_path_match")
+        for item in retrieved:
+            is_cache_candidate = (
+                fast_match is not None
+                and item.ticket_id == fast_match.ticket_id
+                and item.similarity >= fast_threshold
+            )
+            items.append(
+                {
+                    "ticket_id": item.ticket_id,
+                    "category": normalize_category(item.category),
+                    "assignment_group": item.assignment_group,
+                    "source": item.source,
+                    "similarity": round(item.similarity, 4),
+                    "evidence_role": "cache_candidate" if is_cache_candidate else "supporting_context",
+                    "resolution_present": bool(item.resolution.strip()),
+                }
+            )
+
+        return {
+            "quality_score": quality_score,
+            "quality_band": quality_band,
+            "top_similarity": round(top_similarity, 4),
+            "average_similarity": round(average_similarity, 4),
+            "category_consensus": round(category_consensus, 4),
+            "resolution_coverage": round(resolution_coverage, 4),
+            "evidence_count": len(retrieved),
+            "dominant_category": dominant_category,
+            "items": items,
+            "policy": (
+                "Semantic cache bypass is allowed only for an approved, resolved, non-Pending Review ticket at "
+                f">={fast_threshold:.2f}; all lower-confidence evidence must be evaluated by the LLM before resolution or escalation."
+            ),
         }
 
     def _resolver_recommendation(self, state: AgentState) -> dict:
@@ -440,13 +490,14 @@ class RoutingAgent:
         retrieval_similarity = state.get("retrieval_similarity", 0.0)
         resolver = state.get("resolver_recommendation", {})
         gap = state.get("knowledge_gap", {})
+        evidence = state.get("rag_evidence", {})
         route_path = state.get("route_path", "retrieved")
         if state.get("semantic_cache_hit"):
             route_impact = "approved historical resolution returned without invoking the LLM"
         elif state.get("escalation_required"):
-            route_impact = state.get("review_reason") or "confidence gates require human review"
+            route_impact = state.get("escalation_rationale") or "LLM decision requires human review"
         else:
-            route_impact = "retrieved context was sent through generation and verifier gates"
+            route_impact = "retrieved context was attached to the prompt and resolved by the LLM"
         return [
             {
                 "label": "Privacy gate",
@@ -456,12 +507,17 @@ class RoutingAgent:
             {
                 "label": "Nearest approved ticket",
                 "value": f"{state.get('matched_ticket_id') or 'none'} at {retrieval_similarity:.2f}",
-                "impact": "similarity determines fast path, generative RAG, or OOD escalation",
+                "impact": "similarity only controls the >=0.95 semantic cache bypass; otherwise the LLM decides",
             },
             {
                 "label": "Route branch",
                 "value": route_path,
                 "impact": route_impact,
+            },
+            {
+                "label": "RAG evidence pack",
+                "value": f"{evidence.get('quality_band', 'unknown')} at {float(evidence.get('quality_score', 0.0)):.2f}",
+                "impact": f"{int(evidence.get('evidence_count', 0))} approved tickets; category consensus {float(evidence.get('category_consensus', 0.0)):.2f}",
             },
             {
                 "label": "Resolver recommendation",
@@ -471,7 +527,7 @@ class RoutingAgent:
             {
                 "label": "SLA risk",
                 "value": f"{state.get('sla_risk_level', 'normal')} at {state.get('sla_risk_score', 0.0):.2f}",
-                "impact": "priority, confidence, retrieval gap, verifier gap, and privacy risk combined",
+                "impact": "priority, confidence, retrieval gap, LLM confidence gap, and privacy risk combined",
             },
             {
                 "label": "Knowledge coverage",
@@ -537,6 +593,7 @@ class RoutingAgent:
             },
             "knowledge_gap": state.get("knowledge_gap", self._knowledge_gap_signal(state)),
             "resolver_recommendation": state.get("resolver_recommendation", self._resolver_recommendation(state)),
+            "rag_evidence": state.get("rag_evidence", self._build_rag_evidence(state)),
             "route_explanation": state.get("route_explanation", self._route_explanation(state)),
         }
 
@@ -554,7 +611,7 @@ class RoutingAgent:
             urgency=request.urgency,
             impact=request.impact,
             embedding=embedding,
-            source=request.source,
+            source="api",
         )
         self.repo.insert_tickets([record])
         audit = state.get("privacy_audit")

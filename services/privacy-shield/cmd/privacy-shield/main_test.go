@@ -1,6 +1,9 @@
 package main
 
 import (
+	"encoding/json"
+	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 )
@@ -32,5 +35,54 @@ func TestComposeRawTextPrefersRawText(t *testing.T) {
 	})
 	if got != "raw" {
 		t.Fatalf("expected raw text, got %q", got)
+	}
+}
+
+func TestRedactWithoutFindingsSerializesEmptyArray(t *testing.T) {
+	sanitized, findings := redact("Equipment selection dropdown is not saving")
+	if sanitized != "Equipment selection dropdown is not saving" {
+		t.Fatalf("expected unchanged text, got %q", sanitized)
+	}
+	if findings == nil || len(findings) != 0 {
+		t.Fatalf("expected non-nil empty findings slice, got %#v", findings)
+	}
+	payload, err := json.Marshal(ingestResponse{Findings: findings})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(payload), `"findings":[]`) {
+		t.Fatalf("expected findings to serialize as [], got %s", payload)
+	}
+}
+
+func TestIngestRejectsUnknownFields(t *testing.T) {
+	a := &app{}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/ingest/stream",
+		strings.NewReader(`{"short_description":"VPN down","description":"cannot connect","unexpected":true}`),
+	)
+	w := httptest.NewRecorder()
+
+	a.ingest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for unknown field, got %d", w.Code)
+	}
+}
+
+func TestIngestRejectsInvalidPriorityBounds(t *testing.T) {
+	a := &app{}
+	req := httptest.NewRequest(
+		http.MethodPost,
+		"/v1/ingest/stream",
+		strings.NewReader(`{"short_description":"VPN down","description":"cannot connect","urgency":9}`),
+	)
+	w := httptest.NewRecorder()
+
+	a.ingest(w, req)
+
+	if w.Code != http.StatusBadRequest {
+		t.Fatalf("expected 400 for invalid urgency, got %d", w.Code)
 	}
 }

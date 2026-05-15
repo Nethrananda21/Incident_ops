@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>INCIDENT_OPS // USER TICKET PORTAL</title>
+<link rel="stylesheet" href="shared.css?v=20260514-raise2">
+<style>
+body.user-ticket-portal {
+  height:auto;
+  min-height:100vh;
+  overflow-x:hidden;
+  overflow-y:auto;
+  background:var(--bg);
+}
+.portal-bar {
+  height:64px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:18px;
+  padding:0 28px;
+  background:var(--bg1);
+  border-bottom:1px solid var(--border);
+}
+.portal-brand strong {
+  display:block;
+  color:var(--text);
+  font-size:15px;
+  font-weight:800;
+  letter-spacing:0;
+}
+.portal-brand span {
+  display:block;
+  color:var(--text3);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+  margin-top:2px;
+}
+.portal-health {
+  display:inline-flex;
+  align-items:center;
+  gap:7px;
+  padding:6px 11px;
+  border:1px solid #bbf7d0;
+  border-radius:6px;
+  background:#f0fdf4;
+  color:var(--ok);
+  font-size:11px;
+  font-weight:700;
+  white-space:nowrap;
+}
+.portal-health::before {
+  content:"";
+  width:7px;
+  height:7px;
+  border-radius:999px;
+  background:var(--ok);
+}
+.portal-main {
+  max-width:1180px;
+  margin:0 auto;
+  padding:24px;
+}
+.portal-layout {
+  display:grid;
+  grid-template-columns:minmax(360px,.92fr) minmax(420px,1.08fr);
+  gap:12px;
+  align-items:start;
+  min-height:480px;
+}
+.portal-layout .card {
+  min-width:0;
+}
+.portal-form-row {
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:8px;
+}
+.sample-strip {
+  display:flex;
+  align-items:center;
+  gap:8px;
+  flex-wrap:wrap;
+  margin-top:12px;
+  padding-top:12px;
+  border-top:1px solid var(--border);
+}
+.sample-strip span {
+  color:var(--text3);
+  font-size:10px;
+  font-weight:700;
+  letter-spacing:.08em;
+  text-transform:uppercase;
+}
+.sample-strip button {
+  padding:5px 10px;
+  font-size:11px;
+}
+.status-chip {
+  display:inline-flex;
+  align-items:center;
+  gap:6px;
+  padding:3px 8px;
+  border-radius:4px;
+  border:1px solid var(--border2);
+  background:var(--bg2);
+  color:var(--text2);
+  font-size:11px;
+  font-weight:700;
+}
+.status-chip.ok {
+  border-color:#86efac;
+  background:#dcfce7;
+  color:var(--ok);
+}
+.status-chip.warn {
+  border-color:#fde68a;
+  background:#fffbeb;
+  color:var(--warn);
+}
+.request-id {
+  font-family:var(--mono);
+  font-size:13px;
+  font-weight:800;
+  color:var(--accent);
+  overflow-wrap:anywhere;
+}
+.user-summary {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:10px;
+  margin:14px 0;
+}
+.user-metric {
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:10px 12px;
+  min-width:0;
+}
+.user-metric .value {
+  color:var(--text);
+  font-size:13px;
+  font-weight:800;
+  line-height:1.35;
+  overflow-wrap:anywhere;
+}
+.next-steps {
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-radius:6px;
+  padding:12px 14px;
+  margin-top:12px;
+}
+.next-steps ol {
+  margin:0;
+  padding-left:18px;
+  color:var(--text2);
+  font-size:13px;
+  line-height:1.7;
+}
+.history-card {
+  padding:0;
+  overflow:hidden;
+}
+.history-top {
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  padding:12px 16px;
+  border-bottom:1.5px solid var(--border);
+  background:var(--bg1);
+}
+.history-body {
+  overflow:auto;
+}
+.history-table td,
+.history-table th {
+  white-space:normal;
+}
+.history-table tbody tr.selected td {
+  background:#eff6ff;
+}
+.history-table tbody tr.selected td:first-child {
+  border-left:3px solid var(--accent);
+}
+.history-table .id {
+  color:var(--accent);
+}
+.muted-note {
+  color:var(--text3);
+  font-size:11px;
+  line-height:1.55;
+}
+@media (max-width: 980px) {
+  .portal-layout { grid-template-columns:1fr; }
+}
+@media (max-width: 720px) {
+  .portal-bar { align-items:flex-start;flex-direction:column;height:auto;padding:14px 18px; }
+  .portal-main { padding:18px; }
+  .portal-form-row,
+  .user-summary { grid-template-columns:1fr; }
+}
+</style>
+</head>
+<body class="user-ticket-portal">
+<header class="portal-bar">
+  <div class="portal-brand">
+    <strong>IncidentOps Ticket Portal</strong>
+    <span>User request generator</span>
+  </div>
+  <div class="portal-health">Portal online</div>
+</header>
+
+<main class="portal-main">
+  <div class="page-header">
+    <h1>Raise Ticket // Request Workspace</h1>
+    <p>Create a support ticket, get a request ID, and track all tickets submitted from this browser.</p>
+  </div>
+  <div id="raise-error"></div>
+
+  <div class="portal-layout mb-1">
+    <section class="card">
+      <div class="card-title">Ticket Input</div>
+      <label for="r-short">Short Description *</label>
+      <input id="r-short" placeholder="One-line summary of the issue">
+
+      <label for="r-desc">Full Description</label>
+      <textarea id="r-desc" rows="4" placeholder="Describe what happened, where it happened, and any error message you saw."></textarea>
+
+      <div class="portal-form-row">
+        <div>
+          <label for="r-urg">Urgency</label>
+          <select id="r-urg">
+            <option value="1">P1 Critical</option>
+            <option value="2">P2 High</option>
+            <option value="3" selected>P3 Medium</option>
+          </select>
+        </div>
+        <div>
+          <label for="r-imp">Impact</label>
+          <select id="r-imp">
+            <option value="1">P1 Global</option>
+            <option value="2">P2 Service</option>
+            <option value="3" selected>P3 User</option>
+          </select>
+        </div>
+        <div>
+          <label for="r-channel">Contact</label>
+          <select id="r-channel">
+            <option selected>Portal</option>
+            <option>Email</option>
+            <option>Phone</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="sample-strip">
+        <span>Demo presets</span>
+        <button class="btn btn-ghost" type="button" onclick="fillSample('cache')">Known fix</button>
+        <button class="btn btn-ghost" type="button" onclick="fillSample('rag')">Normal route</button>
+        <button class="btn btn-ghost" type="button" onclick="fillSample('ood')">Needs review</button>
+      </div>
+
+      <div style="margin-top:16px">
+        <button class="btn btn-primary" style="width:100%" onclick="submitTicket()" id="route-btn">Submit Ticket</button>
+      </div>
+    </section>
+
+    <section class="card" id="result-card">
+      <div class="card-title">
+        <span>Request Status</span>
+        <span class="sub" id="last-run-time"></span>
+      </div>
+      <div id="status-note" class="muted-note" style="display:none;margin-bottom:10px"></div>
+      <div id="result-content" class="empty-state" style="padding:40px 16px">Submit a ticket to see your request status.</div>
+    </section>
+  </div>
+
+  <section class="card history-card">
+    <div class="history-top">
+      <div>
+        <div class="card-title" style="margin:0">My Tickets</div>
+        <div class="muted-note" style="margin-top:3px">Tickets submitted from this browser appear here automatically.</div>
+      </div>
+      <button class="btn btn-ghost" type="button" onclick="clearRequestHistory()">Clear History</button>
+    </div>
+    <div class="history-body" id="history-body">
+      <div class="empty-state" style="padding:34px 16px">No submitted tickets yet.</div>
+    </div>
+  </section>
+</main>
+
+<script src="shared.js?v=20260514-raise2"></script>
+<script>
+const REQUEST_HISTORY_KEY = 'incidentops_support_request_history';
+let lastRaisedTicketId = '';
+
+const SAMPLES = {
+  cache: {
+    short_description: 'Merchant unable to e-sign Agreement due to session timeout',
+    description: 'Some merchants receive authentication errors when attempting to log in to the Customer UI to review and e-sign the Merchant Agreement, preventing access to the document.',
+    urgency: '3',
+    impact: '3',
+  },
+  rag: {
+    short_description: 'Manual case 3: PDF not loading for Merchant Agreement review for new merchant record',
+    description: 'During the data upload process for a new merchant, the API endpoint consistently returns a 500 error, preventing sales agents from successfully onboarding the merchant. The issue was reproduced by support for merchant MRC-7103 after a browser refresh and retry. This is a new manually created evaluation ticket, not a reopened incident.',
+    urgency: '3',
+    impact: '3',
+  },
+  ood: {
+    short_description: 'Need cafeteria menu updated for a team lunch',
+    description: 'I need help changing lunch menu options for a team event next week. This is not related to the customer portal or merchant agreement.',
+    urgency: '3',
+    impact: '3',
+  },
+};
+
+function setNote(message, tone = '') {
+  const el = document.getElementById('status-note');
+  el.textContent = message;
+  el.style.display = message ? 'block' : 'none';
+  el.style.color = tone === 'fail' ? 'var(--critical)' : tone === 'ok' ? 'var(--ok)' : 'var(--text3)';
+}
+
+function setBusy(isBusy) {
+  const btn = document.getElementById('route-btn');
+  btn.disabled = isBusy;
+  btn.textContent = isBusy ? 'Submitting...' : 'Submit Ticket';
+}
+
+function fillSample(name) {
+  const sample = SAMPLES[name];
+  if (!sample) return;
+  document.getElementById('r-short').value = sample.short_description;
+  document.getElementById('r-desc').value = sample.description;
+  document.getElementById('r-urg').value = sample.urgency;
+  document.getElementById('r-imp').value = sample.impact;
+}
+
+function userResolutionItems(items) {
+  const cleaned = [];
+  plainResolutionItems(items).forEach(item => {
+    const lower = item.toLowerCase();
+    if (lower.startsWith('classify as ') || lower.includes('compare with similar incident')) return;
+    if (lower.includes('resolution reused from')) return;
+    if (lower.includes('validate the fix') || lower.includes('monitor for recurrence')) {
+      cleaned.push('After trying the steps, confirm whether the issue is fixed. If it continues, contact support with your request ID.');
+      return;
+    }
+    cleaned.push(item
+      .replace(/^Resolved by /i, 'Try ')
+      .replace(/Customer UI/g, 'customer portal')
+      .replace(/affected user/g, 'you')
+      .replace(/incident/gi, 'request'));
+  });
+  return Array.from(new Set(cleaned));
+}
+
+function supportState(t) {
+  const needsReview = t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution';
+  if (needsReview) {
+    return {
+      label: 'Support review',
+      className: 'warn',
+      tone: 'var(--warn)',
+      next: 'A specialist will review this ticket.',
+    };
+  }
+  return {
+    label: 'Fix available',
+    className: 'ok',
+    tone: 'var(--ok)',
+    next: 'Try the recommended steps below.',
+  };
+}
+
+function renderSkeleton() {
+  document.getElementById('result-content').innerHTML = `
+    <div style="padding:16px">
+      <div class="skel-line" style="width:48%;margin-bottom:14px"></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
+        <div class="skel-line" style="height:58px"></div>
+        <div class="skel-line" style="height:58px"></div>
+        <div class="skel-line" style="height:58px"></div>
+      </div>
+      <div class="skel-line" style="width:35%;margin-bottom:10px"></div>
+      <div class="skel-line" style="width:100%;margin-bottom:6px"></div>
+      <div class="skel-line" style="width:82%;margin-bottom:6px"></div>
+      <div class="skel-line" style="width:64%"></div>
+    </div>`;
+}
+
+function getRequestHistory() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(REQUEST_HISTORY_KEY) || '[]');
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveRequestHistory(items) {
+  localStorage.setItem(REQUEST_HISTORY_KEY, JSON.stringify(items.slice(0, 12)));
+}
+
+function upsertRequestHistory(t) {
+  if (!t?.ticket_id) return;
+  const state = supportState(t);
+  const current = getRequestHistory();
+  const existing = current.find(item => item.id === t.ticket_id) || {};
+  const next = {
+    ...existing,
+    id: t.ticket_id,
+    title: t.short_description || existing.title || 'Support ticket',
+    issue_area: t.assigned_category || t.category || existing.issue_area || 'Review needed',
+    owner: t.assignment_group || t.owner_group || existing.owner || 'Support',
+    status_label: state.label,
+    status_class: state.className,
+    updated_at: new Date().toISOString(),
+  };
+  saveRequestHistory([next, ...current.filter(item => item.id !== t.ticket_id)]);
+}
+
+function renderHistory(activeId = lastRaisedTicketId) {
+  const rows = getRequestHistory();
+  const body = document.getElementById('history-body');
+  if (!rows.length) {
+    body.innerHTML = '<div class="empty-state" style="padding:34px 16px">No submitted tickets yet.</div>';
+    return rows;
+  }
+  body.innerHTML = `
+    <table class="ticket-table history-table">
+      <thead>
+        <tr>
+          <th>Ticket ID</th>
+          <th>Description</th>
+          <th>Status</th>
+          <th>Area</th>
+          <th>Updated</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${rows.map(item => `
+          <tr class="${item.id === activeId ? 'selected' : ''}" onclick="loadTicketDetail('${html(item.id)}')">
+            <td class="id">${html(item.id)}</td>
+            <td>${html(item.title)}</td>
+            <td><span class="status-chip ${html(item.status_class || '')}">${html(item.status_label || 'Submitted')}</span></td>
+            <td>${html(item.issue_area || 'Review needed')}</td>
+            <td>${html(item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Recently')}</td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>`;
+  return rows;
+}
+
+function clearRequestHistory() {
+  localStorage.removeItem(REQUEST_HISTORY_KEY);
+  lastRaisedTicketId = '';
+  renderHistory('');
+  document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Submit a ticket to see your request status.</div>';
+  setNote('Ticket history cleared for this browser.', 'ok');
+}
+
+function resolutionList(t) {
+  if (t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution') {
+    return '<ol><li>This ticket has been sent to the support team for review.</li><li>A specialist will review the details and follow up with the next action.</li></ol>';
+  }
+  const list = userResolutionItems(t.suggested_resolution_items);
+  if (list.length) return `<ol>${list.map(item => `<li>${html(item)}</li>`).join('')}</ol>`;
+  return '<div class="muted-note">No self-service steps are available yet.</div>';
+}
+
+function renderUserResult(raw) {
+  const t = normalizeTicketPayload(raw);
+  const state = supportState(t);
+  lastRaisedTicketId = t.ticket_id;
+  document.getElementById('last-run-time').textContent = `Updated ${new Date().toLocaleTimeString()}`;
+  document.getElementById('result-content').innerHTML = `
+    <div class="result-revealed">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+        <div>
+          <div class="kpi-label">Ticket ID</div>
+          <div class="request-id">${html(t.ticket_id)}</div>
+        </div>
+        <span class="status-chip ${state.className}">${state.label}</span>
+      </div>
+
+      <div class="user-summary">
+        <div class="user-metric">
+          <div class="kpi-label">Issue Area</div>
+          <div class="value">${html(t.assigned_category || t.category || 'Review needed')}</div>
+        </div>
+        <div class="user-metric">
+          <div class="kpi-label">Assigned Team</div>
+          <div class="value">${html(t.assignment_group || t.owner_group || 'Support')}</div>
+        </div>
+        <div class="user-metric">
+          <div class="kpi-label">Next Step</div>
+          <div class="value" style="color:${state.tone}">${html(state.next)}</div>
+        </div>
+      </div>
+
+      <div class="next-steps">
+        <div class="kpi-label">Recommended Next Steps</div>
+        ${resolutionList(t)}
+      </div>
+
+      ${t.matched_ticket_id && !t.escalation_required ? `
+        <div class="muted-note" style="margin-top:10px">
+          Similar resolved ticket used as reference: <span class="request-id">${html(t.matched_ticket_id)}</span>
+        </div>` : ''}
+    </div>`;
+}
+
+async function submitTicket() {
+  const short = document.getElementById('r-short').value.trim();
+  if (!short) { alert('Short description is required'); return; }
+  clearContainer('raise-error');
+  setNote('Submitting ticket...', '');
+  setBusy(true);
+  renderSkeleton();
+  const payload = {
+    short_description: short,
+    description: document.getElementById('r-desc').value.trim() || short,
+    urgency: Number(document.getElementById('r-urg').value),
+    impact: Number(document.getElementById('r-imp').value),
+    source: 'demo_portal',
+  };
+  try {
+    const result = await apiFetch('/v1/tickets/route', { method:'POST', body: JSON.stringify(payload) });
+    const t = normalizeTicketPayload(result);
+    renderUserResult(t);
+    upsertRequestHistory(t);
+    renderHistory(t.ticket_id);
+    setNote('Ticket submitted and added to My Tickets.', 'ok');
+    await loadTicketDetail(t.ticket_id);
+  } catch(e) {
+    showError('raise-error', e.message, e.status);
+    document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Ticket submission failed.</div>';
+    setNote('Ticket submission failed.', 'fail');
+  } finally {
+    setBusy(false);
+  }
+}
+
+async function loadTicketDetail(id) {
+  const ticketId = id || lastRaisedTicketId;
+  if (!ticketId) return;
+  document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Loading ticket status...</div>';
+  try {
+    const raw = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(ticketId)}`);
+    const t = normalizeTicketPayload(raw);
+    renderUserResult(t);
+    upsertRequestHistory(t);
+    renderHistory(t.ticket_id);
+  } catch(e) {
+    document.getElementById('result-content').innerHTML = `<div class="empty-state" style="padding:40px 16px;color:var(--critical)">Ticket could not be loaded.</div>`;
+  }
+}
+
+function initPortal() {
+  API_BASE = getApiBase();
+  applySettings();
+  const history = renderHistory();
+  if (history.length) loadTicketDetail(history[0].id);
+}
+
+initPortal();
+</script>
+</body>
+</html>

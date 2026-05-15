@@ -104,13 +104,13 @@
       <div class="kpi-label">AVG RETRIEVAL SIM</div>
       <div class="val" id="e-ret">—</div>
       <div class="thresh-visual" style="background:linear-gradient(to right,#fee2e2 0%,#fee2e2 70%,#fef3c7 70%,#fef3c7 95%,#dcfce7 95%)"></div>
-      <div class="note" style="margin-top:6px">OOD &lt;0.70 · RAG 0.70–0.95 · Cache ≥0.95</div>
+      <div class="note" style="margin-top:6px">Cache ≥0.95 · Otherwise LLM evaluates scored RAG evidence</div>
     </div>
     <div class="metric-box">
-      <div class="kpi-label">AVG VERIFIER SCORE</div>
+      <div class="kpi-label">AVG LLM DECISION SCORE</div>
       <div class="val" id="e-ver">—</div>
       <div class="thresh-visual" style="background:linear-gradient(to right,#fee2e2 0%,#fee2e2 70%,#dcfce7 70%)"></div>
-      <div class="note" style="margin-top:6px">Gate ≥0.70 — below escalates</div>
+      <div class="note" style="margin-top:6px">Below 0.70 is weak evidence, not an automatic route gate</div>
     </div>
     <div class="metric-box">
       <div class="kpi-label">CACHE HIT RATE</div>
@@ -132,9 +132,9 @@ async function loadIntelligence() {
 
     const MEANINGS = {
       semantic_cache: 'Approved historical match reused — no LLM call, fastest path, highest confidence.',
-      generative_rag: 'Moderate match found; NVIDIA LLM generates a new resolution using retrieved context.',
-      out_of_distribution: 'No sufficient historical match — escalated to human, no LLM used.',
-      human_review_required: 'Policy risk, P1 urgency, or P1 impact forces human review before any LLM.',
+      generative_rag: 'NVIDIA LLM generated a resolution using scored RAG evidence and retrieved context.',
+      out_of_distribution: 'Legacy weak-evidence route from older decisions.',
+      human_review_required: 'NVIDIA LLM marked this ticket for human review after evaluating RAG evidence and risk.',
     };
     const rq = d.route_quality || [];
     document.getElementById('rq-body').innerHTML = rq.length

@@ -18,9 +18,15 @@ def _semantic_model():
     try:
         from sentence_transformers import SentenceTransformer
 
-        return SentenceTransformer(settings.embedding_model)
+        return SentenceTransformer(
+            settings.embedding_model,
+            local_files_only=settings.embedding_local_files_only,
+        )
     except Exception as exc:
-        LOGGER.warning("semantic embedding model unavailable, using lexical fallback: %s", exc)
+        if settings.embedding_local_files_only:
+            LOGGER.info("semantic embedding model unavailable locally, using lexical fallback")
+        else:
+            LOGGER.warning("semantic embedding model unavailable, using lexical fallback: %s", exc)
         return None
 
 
