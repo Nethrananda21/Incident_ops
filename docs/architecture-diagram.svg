@@ -1,0 +1,245 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180" role="img" aria-labelledby="title desc">
+  <title id="title">IncidentOps AI Architecture Diagram</title>
+  <desc id="desc">Architecture diagram for IncidentOps AI showing frontend, FastAPI gateway, LangGraph routing workflow, Privacy Shield, Redpanda, ClickHouse, NVIDIA LLM, Prometheus, and Grafana.</desc>
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#eff6ff"/>
+      <stop offset="1" stop-color="#f8fbff"/>
+    </linearGradient>
+    <linearGradient id="topbar" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#0f4fd6"/>
+      <stop offset="1" stop-color="#2563eb"/>
+    </linearGradient>
+    <linearGradient id="cardBlue" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#f8fbff"/>
+    </linearGradient>
+    <filter id="shadow" x="-20%" y="-20%" width="140%" height="140%">
+      <feDropShadow dx="0" dy="10" stdDeviation="12" flood-color="#2563eb" flood-opacity="0.12"/>
+    </filter>
+    <pattern id="grid" width="32" height="32" patternUnits="userSpaceOnUse">
+      <path d="M 32 0 L 0 0 0 32" fill="none" stroke="#bfdbfe" stroke-width="1" opacity="0.62"/>
+    </pattern>
+    <marker id="arrowBlue" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#2563eb"/>
+    </marker>
+    <marker id="arrowSlate" markerWidth="12" markerHeight="12" refX="10" refY="6" orient="auto" markerUnits="strokeWidth">
+      <path d="M2,2 L10,6 L2,10 Z" fill="#475467"/>
+    </marker>
+    <style>
+      .title { font: 800 34px Inter, Segoe UI, Arial, sans-serif; fill: #0b1f45; }
+      .subtitle { font: 500 15px Inter, Segoe UI, Arial, sans-serif; fill: #475467; }
+      .top-title { font: 800 34px Inter, Segoe UI, Arial, sans-serif; fill: #ffffff; }
+      .top-subtitle { font: 500 15px Inter, Segoe UI, Arial, sans-serif; fill: #dbeafe; }
+      .section { font: 800 13px Inter, Segoe UI, Arial, sans-serif; fill: #1d4ed8; letter-spacing: .08em; text-transform: uppercase; }
+      .box-title { font: 800 18px Inter, Segoe UI, Arial, sans-serif; fill: #0b1f45; }
+      .box-sub { font: 600 13px Inter, Segoe UI, Arial, sans-serif; fill: #244265; }
+      .label { font: 500 12px Inter, Segoe UI, Arial, sans-serif; fill: #475467; }
+      .mono { font: 700 12px IBM Plex Mono, Consolas, monospace; fill: #1d4ed8; }
+      .small-mono { font: 600 10px IBM Plex Mono, Consolas, monospace; fill: #475467; }
+      .tiny { font: 600 10px Inter, Segoe UI, Arial, sans-serif; fill: #64748b; }
+      .card { fill: url(#cardBlue); stroke: #bfdbfe; stroke-width: 1.4; rx: 14; filter: url(#shadow); }
+      .external { fill: #ffffff; stroke: #93c5fd; stroke-width: 1.4; rx: 14; filter: url(#shadow); }
+      .agent { fill: #eff6ff; stroke: #60a5fa; stroke-width: 1.4; rx: 14; }
+      .data { fill: #ffffff; stroke: #bfdbfe; stroke-width: 1.4; rx: 14; filter: url(#shadow); }
+      .pill { fill: #dbeafe; stroke: #93c5fd; stroke-width: 1; rx: 999; }
+      .dark-pill { fill: #0f4fd6; stroke: #0f4fd6; stroke-width: 1; rx: 999; }
+      .pill-text { font: 700 11px IBM Plex Mono, Consolas, monospace; fill: #1e3a8a; }
+      .dark-pill-text { font: 800 11px Inter, Segoe UI, Arial, sans-serif; fill: #ffffff; }
+      .lane { fill: rgba(255,255,255,.62); stroke: #dbeafe; stroke-width: 1.2; rx: 22; }
+      .docker { fill: rgba(255,255,255,.42); stroke: #93c5fd; stroke-width: 1.6; stroke-dasharray: 8 7; rx: 24; }
+      .arrow { fill: none; stroke: #2563eb; stroke-width: 2.4; marker-end: url(#arrowBlue); }
+      .arrow-soft { fill: none; stroke: #475467; stroke-width: 2; marker-end: url(#arrowSlate); opacity: .58; }
+      .arrow-dash { fill: none; stroke: #2563eb; stroke-width: 2.2; stroke-dasharray: 8 7; marker-end: url(#arrowBlue); }
+      .note { fill: #eff6ff; stroke: #bfdbfe; stroke-width: 1; rx: 10; }
+    </style>
+  </defs>
+
+  <rect width="1800" height="1180" fill="url(#bg)"/>
+  <rect width="1800" height="1180" fill="url(#grid)" opacity="0.7"/>
+  <rect x="0" y="0" width="1800" height="82" fill="url(#topbar)"/>
+  <text x="44" y="51" class="top-title">IncidentOps AI Architecture</text>
+  <text x="548" y="49" class="top-subtitle">Agentic ticket routing, privacy shielding, RAG, human review, and operations analytics</text>
+
+  <rect x="34" y="112" width="1732" height="1012" class="docker"/>
+  <text x="58" y="144" class="section">Docker Compose Runtime</text>
+
+  <!-- External entry points -->
+  <rect x="68" y="182" width="260" height="124" class="external"/>
+  <text x="92" y="216" class="box-title">IT Operator</text>
+  <text x="92" y="242" class="box-sub">Reviewer / analyst</text>
+  <rect x="92" y="258" width="94" height="26" class="pill"/>
+  <text x="107" y="276" class="pill-text">Browser</text>
+
+  <rect x="68" y="350" width="260" height="128" class="external"/>
+  <text x="92" y="384" class="box-title">Ticket Sources</text>
+  <text x="92" y="410" class="box-sub">Manual form, API, webhooks</text>
+  <text x="92" y="438" class="mono">POST /v1/tickets/route</text>
+
+  <rect x="68" y="728" width="260" height="128" class="external"/>
+  <text x="92" y="762" class="box-title">Hugging Face Dataset</text>
+  <text x="92" y="788" class="box-sub">Synthetic ServiceNow incidents</text>
+  <text x="92" y="816" class="small-mono">seed_hf_dataset.py</text>
+
+  <!-- Frontend -->
+  <rect x="404" y="156" width="338" height="210" class="card"/>
+  <text x="432" y="190" class="box-title">review-ui</text>
+  <text x="432" y="216" class="box-sub">Nginx + static HTML/CSS/JS</text>
+  <rect x="432" y="234" width="80" height="26" class="pill"/>
+  <text x="448" y="252" class="pill-text">:8081</text>
+  <text x="432" y="286" class="label">Dashboard, Routing Desk, Stream, Search</text>
+  <text x="432" y="308" class="label">Human Review, Privacy Audit, Knowledge</text>
+  <text x="432" y="330" class="label">Nginx proxies /api/* and SSE stream</text>
+
+  <!-- API gateway -->
+  <rect x="404" y="434" width="338" height="236" class="card"/>
+  <text x="432" y="468" class="box-title">api-gateway</text>
+  <text x="432" y="494" class="box-sub">Python FastAPI public API</text>
+  <rect x="432" y="512" width="80" height="26" class="pill"/>
+  <text x="448" y="530" class="pill-text">:8000</text>
+  <text x="432" y="570" class="label">Routing, dashboard, search, details</text>
+  <text x="432" y="592" class="label">Escalation queue and reviewer feedback</text>
+  <text x="432" y="614" class="label">Privacy audit and intelligence endpoints</text>
+  <text x="432" y="642" class="mono">/v1/*, /metrics, /v1/ready</text>
+
+  <!-- Agent workflow lane -->
+  <rect x="820" y="150" width="594" height="610" class="lane"/>
+  <text x="848" y="184" class="section">LangGraph Routing Agent inside api-gateway</text>
+
+  <rect x="854" y="216" width="226" height="82" class="agent"/>
+  <text x="878" y="248" class="box-title">1. Privacy Node</text>
+  <text x="878" y="274" class="label">Calls Privacy Shield</text>
+
+  <rect x="1154" y="216" width="226" height="82" class="agent"/>
+  <text x="1178" y="248" class="box-title">2. Retrieval Node</text>
+  <text x="1178" y="274" class="label">Embeddings + ClickHouse</text>
+
+  <rect x="854" y="334" width="226" height="88" class="agent"/>
+  <text x="878" y="366" class="box-title">3. RAG Evidence</text>
+  <text x="878" y="392" class="label">Scores context quality</text>
+
+  <rect x="1154" y="334" width="226" height="88" class="agent"/>
+  <text x="1178" y="366" class="box-title">4. Assessment</text>
+  <text x="1178" y="392" class="label">SLA, gaps, resolver signal</text>
+
+  <path d="M 1116 458 L 1268 536 L 1116 614 L 964 536 Z" fill="#ffffff" stroke="#60a5fa" stroke-width="1.6" filter="url(#shadow)"/>
+  <text x="1050" y="526" class="box-title">Approved match?</text>
+  <text x="1024" y="552" class="mono">similarity &gt;= 0.95</text>
+
+  <rect x="854" y="656" width="226" height="76" class="agent"/>
+  <text x="878" y="688" class="box-title">Semantic Cache</text>
+  <text x="878" y="714" class="label">Return approved resolution</text>
+
+  <rect x="1154" y="656" width="226" height="76" class="agent"/>
+  <text x="1178" y="688" class="box-title">Triage + LLM</text>
+  <text x="1178" y="714" class="label">Resolution or human review</text>
+
+  <!-- Privacy, data, and events -->
+  <rect x="1476" y="160" width="248" height="156" class="data"/>
+  <text x="1500" y="194" class="box-title">privacy-shield</text>
+  <text x="1500" y="220" class="box-sub">Go redaction service</text>
+  <rect x="1500" y="238" width="78" height="26" class="pill"/>
+  <text x="1516" y="256" class="pill-text">:8080</text>
+  <text x="1500" y="288" class="label">Hashes, redacts, audit metadata</text>
+
+  <rect x="1476" y="362" width="248" height="124" class="data"/>
+  <text x="1500" y="396" class="box-title">Redpanda</text>
+  <text x="1500" y="422" class="box-sub">Kafka-compatible stream</text>
+  <text x="1500" y="452" class="mono">privacy.audit</text>
+
+  <rect x="1476" y="536" width="248" height="230" class="data"/>
+  <text x="1500" y="570" class="box-title">ClickHouse</text>
+  <text x="1500" y="596" class="box-sub">Operational datastore + RAG corpus</text>
+  <text x="1500" y="630" class="small-mono">incident_ai.tickets</text>
+  <text x="1500" y="654" class="small-mono">routing_decisions</text>
+  <text x="1500" y="678" class="small-mono">privacy_audit</text>
+  <text x="1500" y="702" class="small-mono">review_events</text>
+  <text x="1500" y="732" class="label">Native cosine similarity over embeddings</text>
+
+  <rect x="1154" y="842" width="226" height="116" class="external"/>
+  <text x="1178" y="876" class="box-title">NVIDIA NIM API</text>
+  <text x="1178" y="902" class="box-sub">LLM decision path</text>
+  <text x="1178" y="932" class="small-mono">meta/llama-3.3-70b-instruct</text>
+
+  <rect x="404" y="778" width="338" height="156" class="card"/>
+  <text x="432" y="812" class="box-title">Seeder / Evaluation Jobs</text>
+  <text x="432" y="838" class="box-sub">Scripts in api-gateway image</text>
+  <text x="432" y="872" class="label">Seed sanitized knowledge records</text>
+  <text x="432" y="894" class="label">Run manual route benchmarks</text>
+  <text x="432" y="916" class="small-mono">seed_hf_dataset.py, evaluate_*.py</text>
+
+  <rect x="820" y="842" width="260" height="116" class="data"/>
+  <text x="848" y="876" class="box-title">Local Embeddings</text>
+  <text x="848" y="902" class="box-sub">SentenceTransformers CPU model</text>
+  <text x="848" y="932" class="small-mono">all-MiniLM-L6-v2, dim=384</text>
+
+  <rect x="1476" y="842" width="248" height="116" class="data"/>
+  <text x="1500" y="876" class="box-title">Observability</text>
+  <text x="1500" y="902" class="box-sub">Prometheus + Grafana</text>
+  <text x="1500" y="932" class="label">Scrapes API and Privacy Shield metrics</text>
+
+  <!-- Outcome note -->
+  <rect x="820" y="1012" width="904" height="76" class="note"/>
+  <text x="848" y="1044" class="box-title">Routing outcomes</text>
+  <text x="848" y="1070" class="label">semantic_cache: deterministic fast path | generative_rag: LLM-backed resolution | human_review_required: reviewer queue and feedback persistence</text>
+
+  <!-- Arrows: entry and API -->
+  <path d="M 328 244 C 360 244, 372 244, 404 244" class="arrow"/>
+  <text x="346" y="230" class="tiny">opens UI</text>
+
+  <path d="M 574 366 L 574 434" class="arrow"/>
+  <text x="596" y="404" class="tiny">/api proxy + SSE</text>
+
+  <path d="M 328 414 C 360 414, 372 520, 404 520" class="arrow"/>
+  <text x="344" y="474" class="tiny">ticket payload</text>
+
+  <path d="M 742 552 C 780 552, 790 257, 854 257" class="arrow"/>
+  <text x="768" y="414" class="tiny">run agent</text>
+
+  <!-- Agent arrows -->
+  <path d="M 1080 282 C 1110 292, 1124 292, 1154 282" class="arrow"/>
+  <path d="M 1267 298 L 1267 334" class="arrow"/>
+  <path d="M 1154 378 L 1080 378" class="arrow"/>
+  <path d="M 967 422 L 1042 498" class="arrow"/>
+  <path d="M 1162 614 L 1162 656" class="arrow"/>
+  <path d="M 1066 598 L 980 656" class="arrow"/>
+  <text x="1018" y="646" class="tiny">yes</text>
+  <text x="1180" y="636" class="tiny">no</text>
+
+  <!-- Service/data arrows -->
+  <path d="M 1080 236 C 1236 162, 1356 168, 1476 220" class="arrow-dash"/>
+  <text x="1276" y="188" class="tiny">POST /v1/ingest/stream</text>
+
+  <path d="M 1600 316 L 1600 362" class="arrow"/>
+  <text x="1618" y="344" class="tiny">publish</text>
+
+  <path d="M 1380 257 C 1420 257, 1436 590, 1476 590" class="arrow-soft"/>
+  <text x="1400" y="420" class="tiny">audit metadata</text>
+
+  <path d="M 1380 378 C 1426 378, 1432 640, 1476 640" class="arrow"/>
+  <text x="1408" y="520" class="tiny">read similar tickets</text>
+
+  <path d="M 1380 724 C 1430 724, 1436 704, 1476 704" class="arrow"/>
+  <text x="1392" y="750" class="tiny">write decision</text>
+
+  <path d="M 1267 732 L 1267 842" class="arrow-dash"/>
+  <text x="1286" y="802" class="tiny">sanitized prompt + RAG evidence</text>
+
+  <path d="M 1154 900 L 1080 900" class="arrow-soft"/>
+  <text x="1100" y="884" class="tiny">resolution JSON</text>
+
+  <path d="M 1080 694 C 1110 694, 1122 694, 1154 694" class="arrow"/>
+
+  <path d="M 742 856 L 820 900" class="arrow-soft"/>
+  <path d="M 1080 910 C 1240 910, 1320 680, 1476 672" class="arrow-soft"/>
+  <text x="1194" y="820" class="tiny">embeddings stored with KB</text>
+
+  <path d="M 328 792 L 404 856" class="arrow"/>
+  <path d="M 742 856 C 1010 856, 1210 650, 1476 650" class="arrow"/>
+
+  <path d="M 1476 900 C 1410 912, 1400 948, 1380 948" class="arrow-soft"/>
+  <text x="1348" y="980" class="tiny">scrapes /metrics</text>
+
+  <path d="M 742 626 C 1010 810, 1190 1030, 1476 1048" class="arrow-soft"/>
+  <text x="878" y="1002" class="tiny">dashboards read live APIs backed by ClickHouse</text>
+</svg>
