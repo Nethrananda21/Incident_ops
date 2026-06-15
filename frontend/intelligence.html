@@ -3,16 +3,18 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // ROUTING INTELLIGENCE</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Intelligence</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
-.section-title { font-size:16px;font-weight:700;color:var(--text);letter-spacing:-0.01em;margin:28px 0 14px;display:flex;align-items:center;gap:10px; }
-.section-title::after { content:'';flex:1;height:1px;background:var(--border); }
+.section-title { font-size:16px;font-weight:800;color:var(--text);letter-spacing:0;margin:28px 0 14px;display:flex;align-items:center;gap:10px; }
+.section-title::after { content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent); }
 .metric-row { display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:16px; }
-.metric-box { background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px; }
+.metric-box { background:linear-gradient(180deg,var(--bg1),var(--bg2));border:1px solid var(--border);border-radius:8px;padding:16px;box-shadow:var(--surface-ring),var(--shadow-sm); }
 .metric-box .val { font-size:28px;font-weight:700;letter-spacing:-0.03em;color:var(--text);margin:6px 0 4px; }
 .metric-box .note { font-size:10px;color:var(--text3); }
 .thresh-visual { height:5px;border-radius:999px;margin-top:10px; }
+@media (max-width:1180px) { .metric-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:760px) { .metric-row { grid-template-columns:1fr; } }
 </style>
 </head>
 <body>
@@ -25,14 +27,14 @@
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item active" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
@@ -123,7 +125,7 @@
     ℹ <strong>Benchmark data</strong> (accuracy, F1, per-category precision/recall) will appear here once the backend exposes <code style="background:#dbeafe;padding:1px 5px;border-radius:3px">benchmark_accuracy</code> and <code style="background:#dbeafe;padding:1px 5px;border-radius:3px">category_metrics</code>.
   </div>
 </main>
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 async function loadIntelligence() {
   showSkeleton('rq-skel', 4); showSkeleton('res-skel', 3); showSkeleton('gaps-skel', 3);

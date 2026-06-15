@@ -1,5 +1,6 @@
 from types import SimpleNamespace
 
+from app.clickhouse_repo import RetrievedTicket
 from app.llm import NvidiaLLM, build_evidence_summary, clip_text, load_json_object, normalize_steps
 
 
@@ -38,6 +39,46 @@ def test_fallback_escalation_steps_do_not_reuse_historical_fix():
     assert decision.escalation_required is True
     assert "human support triage" in decision.resolution_steps[0]
     assert not any("Resolved by" in step for step in decision.resolution_steps)
+
+
+def test_fallback_decision_routes_supported_ticket_without_historical_context():
+    llm = NvidiaLLM(SimpleNamespace(nvidia_api_key=""))
+
+    decision = llm._fallback_decision(
+        category="Network",
+        retrieved=[],
+        policy_signal=None,
+    )
+
+    assert decision.escalation_required is False
+    assert decision.confidence_score == 0.58
+    assert "Network" in decision.resolution_steps[0]
+    assert not any("human support triage" in step for step in decision.resolution_steps)
+
+
+def test_fallback_decision_uses_historical_context_when_available():
+    llm = NvidiaLLM(SimpleNamespace(nvidia_api_key=""))
+
+    decision = llm._fallback_decision(
+        category="Network",
+        retrieved=[
+            RetrievedTicket(
+                ticket_id="INC1",
+                short_description="VPN packet loss",
+                sanitized_text="VPN packet loss",
+                category="Network",
+                assignment_group="Network Ops",
+                resolution="Restart the affected VPN gateway.",
+                similarity=0.82,
+                source="curated",
+            )
+        ],
+        policy_signal=None,
+    )
+
+    assert decision.escalation_required is False
+    assert decision.confidence_score == 0.62
+    assert "Restart the affected VPN gateway." in decision.resolution_steps
 
 
 def test_build_evidence_summary_is_compact_and_structured():

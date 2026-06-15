@@ -4,47 +4,84 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>INCIDENT_OPS // DASHBOARD</title>
-  <link rel="stylesheet" href="shared.css?v=20260509-nav9">
+  <title>IncidentOps Dashboard</title>
+  <link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
   <style>
     :root {
-      --route-cache: #1D9E75;
-      --route-rag: #378ADD;
-      --route-ood: #BA7517;
-      --route-human: #E24B4A;
-      --noc-bg: #f3f4f6;
+      --route-cache: #0f172a;
+      --route-rag: #2563eb;
+      --route-ood: #64748b;
+      --route-human: #94a3b8;
+      --noc-bg: #eff6ff;
     }
 
-    body { background: var(--noc-bg); }
+    body { --bg: var(--noc-bg); }
     #main { padding: 24px; }
-    .page-header { margin-bottom: 12px; }
+    .page-header { margin-bottom: 14px; }
     .page-header h1 { font-size: 21px; margin-bottom: 8px; }
     .page-header p { font-size: 13px; }
-    .noc-stack { display: flex; flex-direction: column; gap: 20px; }
+    .header-metrics {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+      flex-wrap: wrap;
+      margin-top: 10px;
+    }
+    .header-metric {
+      display: inline-flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 132px;
+      height: 34px;
+      padding: 0 16px;
+      border: 1px solid #bfdbfe;
+      border-radius: 999px;
+      background: #ffffff;
+      color: #244265;
+      font-family: var(--mono);
+      font-size: 12px;
+      box-shadow: var(--surface-ring), 0 6px 16px rgba(37,99,235,.08);
+    }
+    .header-metric .metric-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 999px;
+      background: #93c5fd;
+      flex: 0 0 auto;
+    }
+    .header-metric strong {
+      color: #0b1f45;
+      font-weight: 700;
+      min-width: 18px;
+      text-align: right;
+    }
+    .header-metric.danger strong { color: #1d4ed8; }
+    .noc-stack { display: flex; flex-direction: column; gap: 22px; }
     .noc-row { display: grid; gap: 12px; }
     .two-col { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
-    .stats-grid { grid-template-columns: repeat(5, minmax(0, 1fr)); position: relative; }
-    .stats-grid.has-pii { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+    .stats-grid { grid-template-columns: repeat(6, minmax(0, 1fr)); position: relative; }
     .noc-card {
-      background: #fff;
-      border: 1px solid #e5e7eb;
-      border-radius: 10px;
+      background: linear-gradient(180deg, var(--bg1) 0%, var(--bg2) 100%);
+      border: 1px solid #cfe3ff;
+      border-radius: 8px;
       padding: 16px;
-      box-shadow: 0 1px 3px rgba(15, 23, 42, .05);
+      box-shadow: var(--surface-ring), 0 10px 24px rgba(37, 99, 235, .08);
       min-width: 0;
+      transition: border-color .14s ease, box-shadow .14s ease, transform .14s ease;
     }
+    .noc-card:hover { border-color: #bfdbfe; box-shadow: var(--surface-ring), 0 14px 30px rgba(37,99,235,.11); }
     .noc-title {
       font-size: 13px;
       font-weight: 700;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: #0f172a;
+      color: #0b1f45;
       margin-bottom: 14px;
     }
-    .muted { color: #6b7280; }
+    .muted { color: #64748b; }
     .mono { font-family: var(--mono); }
-    .inline-error { font-size: 12px; color: var(--route-human); margin-top: 8px; }
-    .empty-copy { font-size: 13px; color: #6b7280; line-height: 1.5; }
+    .inline-error { font-size: 12px; color: #1d4ed8; margin-top: 8px; }
+    .empty-copy { font-size: 13px; color: #64748b; line-height: 1.5; }
 
     .refresh-ring {
       width: 24px;
@@ -61,7 +98,7 @@
       stroke-width: 3;
       stroke-linecap: round;
     }
-    .refresh-ring .track { stroke: #e5e7eb; }
+    .refresh-ring .track { stroke: #dbeafe; }
     .refresh-ring .progress {
       stroke: currentColor;
       stroke-dasharray: 63;
@@ -80,12 +117,13 @@
     }
     .quick-route input {
       height: 38px;
-      border: 1px solid #d1d5db;
+      border: 1px solid #bfdbfe;
       border-radius: 8px;
       padding: 0 12px;
       font-size: 13px;
       background: #fff;
-      color: #0f172a;
+      color: #0b1f45;
+      box-shadow: var(--shadow-xs);
     }
     .quick-route button {
       height: 38px;
@@ -95,91 +133,44 @@
       font-size: 13px;
       font-weight: 700;
       color: #fff;
-      background: #2563eb;
+      background: #0f4fd6;
       cursor: pointer;
+      box-shadow: 0 8px 18px rgba(15,79,214,.20);
+      transition: transform .14s ease, box-shadow .14s ease, background-color .14s ease;
     }
+    .quick-route button:hover { background: #1d4ed8; transform: translateY(-1px); }
     .quick-route button:disabled { opacity: .7; cursor: wait; }
     .quick-result { grid-column: 1 / -1; font-size: 12px; min-height: 18px; }
     .quick-result.ok { color: var(--route-cache); }
-    .quick-result.err { color: var(--route-human); }
+    .quick-result.err { color: #1d4ed8; }
 
-    .status-bar {
-      display: flex;
-      align-items: center;
-      gap: 10px;
-      flex-wrap: wrap;
+    .stat-card { position: relative; min-height: 126px; overflow: hidden; }
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      inset: 0 0 auto 0;
+      height: 3px;
+      background: linear-gradient(90deg, #93c5fd, #2563eb);
     }
-    .status-pill2 {
-      display: inline-flex;
-      align-items: center;
-      gap: 8px;
-      padding: 7px 10px;
-      border-radius: 999px;
-      border: 1px solid #bbf7d0;
-      background: #f0fdf4;
-      font-size: 12px;
-      color: #14532d;
-    }
-    .status-pill2.bad { border-color: #fecaca; background: #fef2f2; color: #991b1b; }
-    .status-dot2 { width: 7px; height: 7px; border-radius: 999px; background: var(--route-cache); flex: 0 0 auto; }
-    .status-pill2.bad .status-dot2 { background: var(--route-human); }
-    .recheck-btn {
-      border: 1px solid #d1d5db;
-      border-radius: 8px;
-      background: #fff;
-      color: #374151;
-      padding: 7px 10px;
-      font-size: 12px;
-      font-weight: 700;
-      cursor: pointer;
-      margin-left: auto;
-    }
-
-    .warning-banner {
-      display: none;
-      align-items: center;
-      justify-content: space-between;
-      gap: 12px;
-      background: #fffbeb;
-      border: 1px solid #fde68a;
-      border-radius: 10px;
-      padding: 12px 14px;
-      color: #92400e;
-      font-size: 13px;
-    }
-    .warning-banner.show { display: flex; }
-    .warning-banner button {
-      border: 0;
-      background: transparent;
-      color: #92400e;
-      font-size: 18px;
-      cursor: pointer;
-    }
-
-    .stat-card { position: relative; min-height: 154px; }
     .stat-label {
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .05em;
-      color: #6b7280;
+      color: #64748b;
       font-weight: 700;
       margin-bottom: 8px;
     }
     .stat-value {
-      font-size: 24px;
-      font-weight: 500;
-      color: #0f172a;
+      font-size: 28px;
+      font-weight: 700;
+      color: #0b1f45;
       line-height: 1.05;
-      margin-bottom: 10px;
+      margin-bottom: 8px;
     }
-    .stat-sub { font-size: 12px; color: #6b7280; margin-top: 7px; min-height: 18px; }
-    .sparkline { display: flex; gap: 4px; height: 28px; align-items: flex-end; margin-top: 8px; }
-    .sparkline span { width: 10px; min-height: 3px; border-radius: 3px 3px 0 0; background: #378ADD; opacity: .9; }
-    .trend { font-size: 12px; margin-top: 7px; color: #6b7280; }
+    .stat-sub { font-size: 12px; color: #64748b; margin-top: 7px; min-height: 18px; }
+    .trend { font-size: 12px; margin-top: 8px; color: #64748b; }
     .trend.up { color: var(--route-cache); }
     .trend.down { color: var(--route-human); }
-    .progress-thin { height: 6px; border-radius: 999px; background: #e5e7eb; overflow: hidden; margin: 3px 0 6px; }
-    .progress-thin span { display: block; height: 100%; border-radius: inherit; background: var(--route-cache); }
     .refresh-dot {
       display: none;
       position: absolute;
@@ -194,9 +185,9 @@
     .stats-grid.refreshing .refresh-dot { display: block; }
     @keyframes dot-pulse { 0%,100%{opacity:.35;transform:scale(.85)} 50%{opacity:1;transform:scale(1.15)} }
 
-    .route-canvas-wrap { height: 150px; }
-    canvas { display: block; width: 100%; }
-    .category-row, .latency-row, .confidence-row {
+    .attention-layout { grid-template-columns: minmax(0, 1.55fr) minmax(300px, .8fr); align-items: start; }
+    .three-col { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+    .category-row {
       display: grid;
       grid-template-columns: 110px minmax(0, 1fr) 54px;
       gap: 10px;
@@ -204,44 +195,58 @@
       margin-bottom: 10px;
       font-size: 12px;
     }
-    .category-row .label, .latency-row .label {
+    .category-row .label {
       min-width: 0;
       overflow: hidden;
       text-overflow: ellipsis;
       white-space: nowrap;
-      color: #374151;
+      color: #244265;
     }
-    .bar-track { height: 8px; background: #e5e7eb; border-radius: 999px; overflow: hidden; }
-    .bar-fill { display: block; height: 100%; border-radius: 999px; background: #378ADD; }
-    .bar-num { text-align: right; font-size: 11px; color: #374151; }
-
-    .trace-row {
+    .bar-track { height: 8px; background: #dbeafe; border-radius: 999px; overflow: hidden; }
+    .bar-fill { display: block; height: 100%; border-radius: 999px; background: #2563eb; }
+    .bar-num { text-align: right; font-size: 11px; color: #244265; }
+    .metric-list { display: grid; gap: 11px; }
+    .metric-line {
       display: grid;
-      grid-template-columns: 10px minmax(0, 1fr) auto;
-      gap: 10px;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
       align-items: center;
-      padding: 8px 0;
-      border-bottom: 1px solid #f3f4f6;
+      padding: 9px 0;
+      border-bottom: 1px solid #eff6ff;
       font-size: 13px;
     }
-    .trace-row:last-child { border-bottom: 0; }
-    .trace-dot { width: 8px; height: 8px; border-radius: 999px; }
-    .trace-outcome { color: #6b7280; font-size: 12px; text-align: right; }
-    .trace-meta { margin-top: 12px; font-size: 12px; color: #6b7280; }
-    .formula { margin-top: 10px; font-size: 11px; color: #6b7280; line-height: 1.55; }
-    .overall-score { margin-top: 8px; font-size: 22px; font-weight: 700; }
-
-    .heatmap-wrap {
+    .metric-line:last-child { border-bottom: 0; }
+    .metric-label { min-width: 0; color: #244265; font-weight: 700; }
+    .metric-value { color: #0b1f45; font-weight: 800; font-family: var(--mono); white-space: nowrap; }
+    .metric-value.good { color: #1d4ed8; }
+    .metric-value.warn { color: #2563eb; }
+    .metric-note { margin-top: 10px; color: #64748b; font-size: 11px; line-height: 1.45; }
+    .decision-card {
       display: grid;
-      grid-template-columns: 34px repeat(7, 18px);
-      gap: 8px;
-      align-items: center;
-      width: max-content;
+      gap: 10px;
+      color: #244265;
+      font-size: 13px;
     }
-    .heat-label { font-size: 10px; color: #6b7280; text-align: right; }
-    .heat-cell { width: 16px; height: 16px; border-radius: 4px; background: rgba(55, 138, 221, .08); }
-    .heat-day { font-size: 10px; color: #6b7280; text-align: center; }
-    .heat-note { margin-top: 10px; font-size: 10px; color: #6b7280; font-style: italic; }
+    .decision-title {
+      color: #0b1f45;
+      font-size: 18px;
+      font-weight: 800;
+      line-height: 1.2;
+    }
+    .decision-row {
+      display: grid;
+      grid-template-columns: 82px minmax(0, 1fr);
+      gap: 10px;
+      align-items: start;
+      line-height: 1.4;
+    }
+    .decision-key {
+      color: #64748b;
+      font-size: 11px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: .05em;
+    }
 
     .table-card { padding: 0; overflow: hidden; }
     .table-top {
@@ -250,43 +255,46 @@
       justify-content: space-between;
       gap: 10px;
       padding: 14px 16px;
+      border-bottom: 1px solid #dbeafe;
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
     }
     .count-badge {
       display: inline-flex;
       align-items: center;
       border-radius: 999px;
-      background: #f3f4f6;
-      color: #374151;
+      background: #eff6ff;
+      color: #244265;
       font-size: 11px;
       font-weight: 700;
       padding: 3px 8px;
       margin-left: 8px;
     }
-    .table-scroll { overflow-x: auto; }
+    .table-scroll { overflow-x: auto; scrollbar-gutter: stable; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th {
       position: sticky;
       top: 0;
       z-index: 1;
-      background: #fff;
-      color: #6b7280;
+      background: linear-gradient(180deg, var(--bg1), var(--bg2));
+      color: #64748b;
       font-size: 11px;
       text-transform: uppercase;
       letter-spacing: .05em;
       text-align: left;
       padding: 10px 12px;
-      border-top: 1px solid #e5e7eb;
-      border-bottom: 1px solid #e5e7eb;
+      border-top: 1px solid #dbeafe;
+      border-bottom: 1px solid #dbeafe;
     }
     td {
       padding: 10px 12px;
-      border-bottom: 1px solid #e5e7eb;
+      border-bottom: 1px solid #dbeafe;
       font-size: 13px;
-      color: #374151;
+      color: #244265;
       vertical-align: middle;
     }
+    tbody tr:hover td { background: #eef6ff; }
     tr { transition: background-color 1.5s ease; }
-    tr.flash { background: #fef3c7; }
+    tr.flash { background: #dbeafe; }
     .linkish { color: #2563eb; text-decoration: none; font-weight: 700; }
     .truncate { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .route-pill {
@@ -304,14 +312,44 @@
     }
     .review-btn {
       display: inline-block;
-      border: 1px solid #d1d5db;
+      border: 1px solid #bfdbfe;
       border-radius: 7px;
       padding: 5px 9px;
-      color: #374151;
+      color: #244265;
       text-decoration: none;
       font-size: 12px;
       font-weight: 700;
       background: #fff;
+      box-shadow: var(--shadow-xs);
+      transition: border-color .14s ease, color .14s ease, box-shadow .14s ease, transform .14s ease;
+    }
+    .review-btn:hover { border-color: #93c5fd; color: #0f4fd6; box-shadow: 0 6px 14px rgba(37,99,235,.12); transform: translateY(-1px); }
+
+    .attention-table {
+      min-width: 760px;
+    }
+    .attention-table th,
+    .attention-table td {
+      overflow: hidden;
+    }
+    .attention-table th:nth-child(1),
+    .attention-table td:nth-child(1) { width: 170px; }
+    .attention-table th:nth-child(3),
+    .attention-table td:nth-child(3) { width: 95px; }
+    .attention-table th:nth-child(4),
+    .attention-table td:nth-child(4) { width: 115px; }
+    .attention-table th:nth-child(5),
+    .attention-table td:nth-child(5) { width: 90px; }
+    .attention-table th:nth-child(6),
+    .attention-table td:nth-child(6) { width: 92px; }
+    .attention-table th:nth-child(7),
+    .attention-table td:nth-child(7) { width: 110px; }
+    .attention-table td:nth-child(1) .linkish {
+      display: block;
+      max-width: 100%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
     }
 
     .recent-table th:nth-child(1), .recent-table td:nth-child(1) { width: 120px; }
@@ -346,8 +384,15 @@
     }
 
     @media (max-width: 1180px) {
-      .stats-grid, .stats-grid.has-pii { grid-template-columns: repeat(2, minmax(0, 1fr)); }
-      .two-col { grid-template-columns: 1fr; }
+      .stats-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .two-col, .attention-layout, .three-col { grid-template-columns: 1fr; }
+    }
+    @media (max-width: 760px) {
+      #main { padding: 16px; }
+      .quick-route { grid-template-columns: 1fr; max-width: none; }
+      .quick-route button { width: 100%; }
+      .stats-grid { grid-template-columns: 1fr; }
+      .header-metric { flex: 1 1 150px; justify-content: center; }
     }
   </style>
 </head>
@@ -356,7 +401,7 @@
   <div id="topbar">
     <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
     <div class="center">
-      <div class="page-title">Dashboard // NOC Overview</div>
+      <div class="page-title">Dashboard</div>
     </div>
     <div class="right">
       <div id="status-pill">
@@ -373,14 +418,14 @@
   </div>
 
   <nav id="sidebar" aria-label="Primary navigation">
-    <div class="nav-section">OPERATIONS</div>
+    <div class="nav-section">Work</div>
     <a class="nav-item active" href="dashboard.html"><span>Dashboard</span></a>
     <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
     <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
     <a class="nav-item" href="search.html"><span>Search</span></a>
-    <div class="nav-section">ANALYTICS</div>
+    <div class="nav-section">Insights</div>
     <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-    <div class="nav-section">DATA</div>
+    <div class="nav-section">Records</div>
     <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
     <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
     <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
@@ -388,8 +433,12 @@
 
   <main id="main">
     <div class="page-header">
-      <h1>Dashboard // NOC Overview</h1>
-      <p>Live operating picture from <span class="mono" style="color:var(--accent)">GET /v1/dashboard</span></p>
+      <h1>Dashboard</h1>
+      <div class="header-metrics" aria-label="Ticket routing summary">
+        <span class="header-metric"><span class="metric-dot"></span><strong id="header-received">0</strong><span>received</span></span>
+        <span class="header-metric"><strong id="header-routed">0</strong><span>routed</span></span>
+        <span class="header-metric danger"><span>escalated</span><strong id="header-escalated">0</strong></span>
+      </div>
     </div>
 
     <form class="quick-route" id="quick-route-form">
@@ -399,16 +448,6 @@
     </form>
 
     <div class="noc-stack">
-      <section class="status-bar" id="backend-status-bar">
-        <span class="status-pill2"><span class="status-dot2"></span><strong>API</strong> <span>checking</span></span>
-        <button class="recheck-btn" id="recheck-health">Recheck</button>
-      </section>
-
-      <div class="warning-banner" id="health-warning">
-        <span id="health-warning-text"></span>
-        <button type="button" id="dismiss-warning" aria-label="Dismiss warning">×</button>
-      </div>
-
       <section class="noc-row stats-grid" id="stats-grid">
         <span class="refresh-dot"></span>
         <div class="noc-card stat-card" id="stat-total"></div>
@@ -416,14 +455,15 @@
         <div class="noc-card stat-card" id="stat-cache"></div>
         <div class="noc-card stat-card" id="stat-escalations"></div>
         <div class="noc-card stat-card" id="stat-latency"></div>
-        <a class="noc-card stat-card" id="stat-pii" href="privacy.html" style="display:none;text-decoration:none"></a>
+        <div class="noc-card stat-card" id="stat-review"></div>
       </section>
 
-      <section class="noc-row two-col">
-        <div class="noc-card">
-          <div class="noc-title">How tickets are routed</div>
-          <div class="route-canvas-wrap"><canvas id="route-chart" height="150"></canvas></div>
-          <div id="route-chart-error"></div>
+      <section class="noc-row attention-layout">
+        <div class="noc-card table-card">
+          <div class="table-top">
+            <div class="noc-title" style="margin:0">Tickets that need attention <span class="count-badge" id="risk-count">0 escalations</span></div>
+          </div>
+          <div id="risk-table"></div>
         </div>
         <div class="noc-card">
           <div class="noc-title">Ticket load by category</div>
@@ -431,33 +471,30 @@
         </div>
       </section>
 
-      <section class="noc-row two-col">
+      <section class="noc-row three-col">
         <div class="noc-card">
-          <div class="noc-title">Last AI decision — step by step</div>
-          <div id="last-trace"></div>
+          <div class="noc-title">AI impact overview</div>
+          <div id="ai-impact"></div>
         </div>
         <div class="noc-card">
-          <div class="noc-title">Confidence score explained</div>
-          <div id="confidence-breakdown"></div>
+          <div class="noc-title">Knowledge coverage</div>
+          <div id="knowledge-coverage"></div>
+        </div>
+        <div class="noc-card">
+          <div class="noc-title">Latest AI decision</div>
+          <div id="latest-decision"></div>
         </div>
       </section>
 
       <section class="noc-row two-col">
         <div class="noc-card">
-          <div class="noc-title">Ticket activity — last 7 days</div>
-          <div id="activity-heatmap"></div>
+          <div class="noc-title">Human review insights</div>
+          <div id="review-insights"></div>
         </div>
         <div class="noc-card">
-          <div class="noc-title">Response time by route</div>
-          <div id="latency-by-route"></div>
+          <div class="noc-title">Privacy protection summary</div>
+          <div id="privacy-summary"></div>
         </div>
-      </section>
-
-      <section class="noc-card table-card">
-        <div class="table-top">
-          <div class="noc-title" style="margin:0">Tickets that need attention <span class="count-badge" id="risk-count">0 escalations</span></div>
-        </div>
-        <div id="risk-table"></div>
       </section>
 
       <section class="noc-card table-card">
@@ -488,28 +525,26 @@
     </div>
   </main>
 
-  <script src="shared.js?v=20260509-nav9"></script>
+  <script src="shared.js?v=20260613-pagesfix2"></script>
   <script>
     const ROUTES = [
-      { key: 'semantic_cache', label: 'Semantic cache', short: 'Cache hit', color: '#1D9E75' },
-      { key: 'generative_rag', label: 'Generative RAG', short: 'AI-generated', color: '#378ADD' },
-      { key: 'out_of_distribution', label: 'Legacy weak evidence', short: 'Legacy', color: '#BA7517' },
-      { key: 'human_review_required', alt: 'human_review', label: 'Human review', short: 'Human review', color: '#E24B4A' },
+      { key: 'semantic_cache', label: 'Semantic cache', short: 'Cache hit', color: '#0f172a' },
+      { key: 'generative_rag', label: 'Generative RAG', short: 'AI-generated', color: '#2563eb' },
+      { key: 'out_of_distribution', label: 'Legacy weak evidence', short: 'Legacy', color: '#64748b' },
+      { key: 'human_review_required', alt: 'human_review', label: 'Human review', short: 'Human review', color: '#94a3b8' },
     ];
     const intervals = [];
-    let latestHealth = null;
     let latestDashboard = null;
     let latestDetail = null;
     let recentIds = new Set();
-    let stream = null;
 
     const pct = v => Math.round(Number(v || 0) * 100);
     const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
     const safeNum = v => Number.isFinite(Number(v)) ? Number(v) : 0;
     const fmtPct = v => `${Math.round(safeNum(v) * 100)}%`;
-    const confidenceColor = percent => percent >= 70 ? '#1D9E75' : percent >= 50 ? '#BA7517' : '#E24B4A';
-    const riskTextColor = level => level === 'critical' ? '#E24B4A' : level === 'elevated' ? '#BA7517' : '#374151';
-    const routeMeta = route => ROUTES.find(r => r.key === route || r.alt === route) || { label: route || 'Unrouted', short: route || 'Unrouted', color: '#6b7280' };
+    const confidenceColor = percent => percent >= 70 ? '#1d4ed8' : percent >= 50 ? '#2563eb' : '#60a5fa';
+    const riskTextColor = level => level === 'critical' ? '#1d4ed8' : level === 'elevated' ? '#2563eb' : '#244265';
+    const routeMeta = route => ROUTES.find(r => r.key === route || r.alt === route) || { label: route || 'Unrouted', short: route || 'Unrouted', color: '#64748b' };
     const detailUrl = id => `ticket.html?id=${encodeURIComponent(id)}`;
     const privacyUrl = id => `privacy.html?ticket=${encodeURIComponent(id)}`;
 
@@ -562,11 +597,6 @@
       return arr;
     }
 
-    function sparkHtml(values, color) {
-      const max = Math.max(...values.map(safeNum), 1);
-      return `<div class="sparkline">${values.map(v => `<span style="height:${clamp(safeNum(v) / max * 28, 3, 28)}px;background:${color}"></span>`).join('')}</div>`;
-    }
-
     function trendHtml(values, formatter = v => Math.round(v)) {
       const last = safeNum(values.at(-1));
       const prev = safeNum(values.at(-2));
@@ -576,12 +606,10 @@
       return `<div class="trend ${cls}">${delta >= 0 ? '↑' : '↓'} ${html(formatter(Math.abs(delta)))} since last refresh</div>`;
     }
 
-    function statCard({ label, value, color, sparkValues, trend, sub, progress }) {
+    function statCard({ label, value, color, trend, sub }) {
       return `
         <div class="stat-label">${html(label)}</div>
-        <div class="stat-value" style="color:${color || '#0f172a'}">${html(value)}</div>
-        ${progress != null ? `<div class="progress-thin"><span style="width:${clamp(progress, 0, 100)}%;background:${color}"></span></div>` : ''}
-        ${sparkValues ? sparkHtml(sparkValues, color || '#378ADD') : ''}
+        <div class="stat-value" style="color:${color || '#0b1f45'}">${html(value)}</div>
         ${sub ? `<div class="stat-sub">${sub}</div>` : ''}
         ${trend || ''}
       `;
@@ -593,78 +621,36 @@
       const decisions = safeNum(routing.decisions || d.routing_decisions_total);
       const total = safeNum(d.total_tickets ?? d.tickets_total);
       const escalations = safeNum(d.escalation_count ?? routing.escalations);
-      const cacheHits = safeNum(routing.semantic_cache_hits);
+      const cacheHits = safeNum(routing.semantic_cache_hits ?? routeObj.semantic_cache);
+      const routeDistribution = {
+        semantic_cache: safeNum(routeObj.semantic_cache),
+        generative_rag: safeNum(routeObj.generative_rag),
+        out_of_distribution: safeNum(routeObj.out_of_distribution),
+        human_review_required: safeNum(routeObj.human_review_required ?? routeObj.human_review),
+      };
       return {
         raw: d,
         total,
         avgConfidence: safeNum(d.avg_confidence ?? routing.avg_confidence),
         cacheHitRate: safeNum(d.cache_hit_rate ?? (decisions ? cacheHits / decisions : 0)),
+        cacheHits,
         escalations,
         avgLatency: safeNum(d.avg_latency_ms ?? routing.avg_latency_ms),
-        routeDistribution: {
-          semantic_cache: safeNum(routeObj.semantic_cache),
-          generative_rag: safeNum(routeObj.generative_rag),
-          out_of_distribution: safeNum(routeObj.out_of_distribution),
-          human_review_required: safeNum(routeObj.human_review_required ?? routeObj.human_review),
-        },
+        routeDistribution,
+        autoRouted: routeDistribution.semantic_cache + routeDistribution.generative_rag + routeDistribution.out_of_distribution,
         categories: d.category_distribution || d.categories || [],
-        routeLatency: d.route_latency_ms || {},
-        components: d.avg_confidence_components || null,
         privacyCount: safeNum(d.privacy_findings_count ?? d.privacy_findings_total),
+        privacyByType: d.privacy_by_type || [],
         entityTypes: d.top_entity_types || (d.privacy_by_type || []).slice(0, 2).map(x => x.entity_type),
         decisions,
       };
     }
 
-    async function fetchHealth() {
-      try {
-        latestHealth = await apiFetch('/v1/health');
-        renderHealth(latestHealth);
-        renderWarnings();
-      } catch(e) {
-        console.error(e);
-        renderHealth({ status: 'error', clickhouse: false, nvidia_configured: false, model: '—', uptime_seconds: 0 });
-      }
-    }
-
-    function renderHealth(h) {
-      const apiOk = h.status === 'ok' || h.status === 'degraded';
-      const dbOk = !!h.clickhouse;
-      const aiOk = !!h.nvidia_configured;
-      const model = h.model || '—';
-      const uptime = formatDuration(h.uptime ?? h.uptime_seconds);
-      const pill = (label, value, ok = true) => `<span class="status-pill2 ${ok ? '' : 'bad'}"><span class="status-dot2"></span><strong>${html(label)}</strong> <span>${html(value)}</span></span>`;
-      document.getElementById('backend-status-bar').innerHTML = `
-        ${pill('API', apiOk ? 'ok' : 'error', apiOk)}
-        ${pill('Database', dbOk ? 'connected' : 'disconnected', dbOk)}
-        ${pill('AI model', aiOk ? 'configured' : 'missing key', aiOk)}
-        ${pill('Model name', model, aiOk)}
-        ${pill('Uptime', uptime, apiOk)}
-        <button class="recheck-btn" id="recheck-health">Recheck</button>
-      `;
-      document.getElementById('recheck-health')?.addEventListener('click', fetchHealth);
-    }
-
-    function renderWarnings() {
-      const d = latestDashboard ? normalizeDashboard(latestDashboard) : null;
-      const messages = [];
-      if (latestHealth && !latestHealth.clickhouse) messages.push('Database is disconnected. Routing decisions may not be saving.');
-      if (latestHealth && !latestHealth.nvidia_configured) messages.push('AI model key is not set. AI-generated resolutions are disabled.');
-      if (d && d.total > 0 && d.escalations / d.total > 0.20) messages.push('Escalation rate is above 20%. Check the Intelligence page for knowledge gaps.');
-      const banner = document.getElementById('health-warning');
-      const text = document.getElementById('health-warning-text');
-      const active = messages[0] || '';
-      const key = `dismissed_warning_${active}`;
-      if (active && sessionStorage.getItem(key) !== '1') {
-        text.textContent = active;
-        banner.dataset.dismissKey = key;
-        banner.classList.add('show');
-      } else {
-        banner.classList.remove('show');
-      }
-    }
-
     function renderStats(d) {
+      document.getElementById('header-received').textContent = d.total.toLocaleString();
+      document.getElementById('header-routed').textContent = d.decisions.toLocaleString();
+      document.getElementById('header-escalated').textContent = d.escalations.toLocaleString();
+
       const totalSpark = d.raw.sparklines?.total_tickets || spark('total', d.total);
       const confSpark = d.raw.sparklines?.avg_confidence || spark('confidence', pct(d.avgConfidence));
       const cacheSpark = d.raw.sparklines?.cache_hit_rate || spark('cache', pct(d.cacheHitRate));
@@ -672,36 +658,32 @@
       const latSpark = d.raw.sparklines?.avg_latency_ms || spark('latency', d.avgLatency);
       const confPct = pct(d.avgConfidence);
       const cachePct = pct(d.cacheHitRate);
-      const latencyColor = d.avgLatency < 500 ? '#1D9E75' : d.avgLatency <= 2000 ? '#BA7517' : '#E24B4A';
+      const latencyColor = d.avgLatency < 500 ? '#1d4ed8' : d.avgLatency <= 2000 ? '#2563eb' : '#60a5fa';
       const escRate = d.total ? d.escalations / d.total * 100 : 0;
+      const reviewRate = d.decisions ? d.escalations / d.decisions * 100 : 0;
       document.getElementById('stat-total').innerHTML = statCard({
         label: 'Total tickets',
         value: d.total.toLocaleString(),
-        color: '#378ADD',
-        sparkValues: totalSpark,
+        color: '#2563eb',
         trend: trendHtml(totalSpark, v => Math.round(v).toLocaleString()),
       });
       document.getElementById('stat-confidence').innerHTML = statCard({
         label: 'Avg confidence',
         value: `${confPct}%`,
         color: confidenceColor(confPct),
-        progress: confPct,
-        sparkValues: confSpark,
         trend: trendHtml(confSpark, v => `${Math.round(v)} pts`),
       });
       document.getElementById('stat-cache').innerHTML = statCard({
         label: 'Cache hits',
         value: `${cachePct}%`,
-        color: cachePct >= 30 ? '#1D9E75' : '#378ADD',
-        sparkValues: cacheSpark,
+        color: cachePct >= 30 ? '#1d4ed8' : '#2563eb',
         sub: `LLM calls saved: ${Math.round(d.total * d.cacheHitRate).toLocaleString()}`,
         trend: trendHtml(cacheSpark, v => `${Math.round(v)} pts`),
       });
       document.getElementById('stat-escalations').innerHTML = statCard({
         label: 'Escalations',
         value: d.escalations.toLocaleString(),
-        color: d.escalations > 10 ? '#E24B4A' : d.escalations > 0 ? '#BA7517' : '#1D9E75',
-        sparkValues: escSpark,
+        color: d.escalations > 10 ? '#1d4ed8' : d.escalations > 0 ? '#2563eb' : '#60a5fa',
         sub: `Escalation rate: ${escRate.toFixed(1)}%`,
         trend: trendHtml(escSpark, v => Math.round(v).toLocaleString()),
       });
@@ -709,56 +691,13 @@
         label: 'Avg response time',
         value: formatLatency(d.avgLatency),
         color: latencyColor,
-        sparkValues: latSpark,
         trend: trendHtml(latSpark, v => formatLatency(v)),
       });
-      const pii = document.getElementById('stat-pii');
-      if (d.privacyCount > 0) {
-        document.getElementById('stats-grid').classList.add('has-pii');
-        pii.style.display = '';
-        pii.innerHTML = statCard({
-          label: 'PII found today',
-          value: d.privacyCount.toLocaleString(),
-          color: '#E24B4A',
-          sparkValues: spark('privacy', d.privacyCount),
-          sub: `Types: ${d.entityTypes.slice(0, 2).join(', ') || '—'}`,
-        });
-      } else {
-        document.getElementById('stats-grid').classList.remove('has-pii');
-        pii.style.display = 'none';
-      }
-    }
-
-    function drawRouteChart(d) {
-      const canvas = document.getElementById('route-chart');
-      const rect = canvas.parentElement.getBoundingClientRect();
-      const scale = window.devicePixelRatio || 1;
-      canvas.width = Math.max(360, rect.width) * scale;
-      canvas.height = 150 * scale;
-      canvas.style.height = '150px';
-      const ctx = canvas.getContext('2d');
-      ctx.scale(scale, scale);
-      ctx.clearRect(0, 0, canvas.width, canvas.height);
-      const data = ROUTES.map(r => ({ ...r, value: d.routeDistribution[r.key] || 0 }));
-      const max = Math.max(...data.map(x => x.value), 1);
-      const w = rect.width || 360;
-      const gap = 24;
-      const barW = Math.max(34, (w - gap * (data.length + 1)) / data.length);
-      ctx.font = '12px Inter, sans-serif';
-      ctx.textAlign = 'center';
-      data.forEach((item, i) => {
-        const x = gap + i * (barW + gap);
-        const h = item.value ? Math.max(8, item.value / max * 82) : 4;
-        const y = 100 - h;
-        ctx.fillStyle = '#0f172a';
-        ctx.fillText(String(item.value), x + barW / 2, y - 8);
-        ctx.fillStyle = item.color;
-        ctx.beginPath();
-        ctx.roundRect(x, y, barW, h, 5);
-        ctx.fill();
-        ctx.fillStyle = '#374151';
-        ctx.font = '11px Inter, sans-serif';
-        ctx.fillText(item.short, x + barW / 2, 126);
+      document.getElementById('stat-review').innerHTML = statCard({
+        label: 'Human review rate',
+        value: `${reviewRate.toFixed(1)}%`,
+        color: reviewRate > 50 ? '#2563eb' : '#1d4ed8',
+        sub: `${d.escalations.toLocaleString()} of ${d.decisions.toLocaleString()} routed tickets`,
       });
     }
 
@@ -787,121 +726,104 @@
         const item = recent.tickets?.[0];
         if (!item) {
           latestDetail = null;
-          renderTrace(null);
-          renderConfidence(normalizeDashboard(latestDashboard || {}), null);
+          renderLatestDecision(null);
           return;
         }
         latestDetail = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(item.ticket_id)}`);
-        renderTrace(latestDetail);
-        renderConfidence(normalizeDashboard(latestDashboard || {}), latestDetail);
+        renderLatestDecision(latestDetail);
       } catch(e) {
         console.error(e);
-        document.getElementById('last-trace').innerHTML = '<div class="inline-error">Could not load — retrying in 30 s</div>';
+        document.getElementById('latest-decision').innerHTML = '<div class="inline-error">Could not load — retrying in 30 s</div>';
       }
     }
 
-    function renderTrace(detail) {
+    function metricList(rows, note = '') {
+      return `<div class="metric-list">${rows.map(row => `
+        <div class="metric-line">
+          <div class="metric-label">${html(row.label)}</div>
+          <div class="metric-value ${row.tone || ''}">${html(row.value)}</div>
+        </div>`).join('')}</div>${note ? `<div class="metric-note">${html(note)}</div>` : ''}`;
+    }
+
+    function renderLatestDecision(detail) {
       if (!detail?.routing) {
-        document.getElementById('last-trace').innerHTML = '<div class="empty-copy">No tickets routed yet. Submit one from Routing Desk to see the trace here.</div>';
+        document.getElementById('latest-decision').innerHTML = '<div class="empty-copy">No tickets routed yet.</div>';
         return;
       }
       const r = detail.routing;
-      const rows = [];
-      rows.push(['#1D9E75', 'Privacy check', `${detail.privacy_audit?.length || r.redacted_entities_count || 0} redactions`]);
-      if (r.confidence_components?.retrieval_similarity != null || r.retrieval_similarity != null) rows.push(['#378ADD', 'Similar ticket search', `${Math.round(safeNum(r.confidence_components?.retrieval_similarity ?? r.retrieval_similarity) * 100)}% match`]);
-      if (r.route_path === 'semantic_cache') rows.push(['#1D9E75', 'Cache match found', r.matched_ticket_id || 'matched']);
-      if (r.route_path === 'generative_rag') rows.push(['#378ADD', 'AI wrote a resolution', 'generated']);
-      if (r.route_path === 'out_of_distribution') rows.push(['#BA7517', 'Legacy weak-evidence route', 'review']);
-      if (r.confidence_components?.verifier_score != null || r.verifier_score != null) rows.push(['#7c3aed', 'LLM decision confidence', `${Math.round(safeNum(r.confidence_components?.verifier_score ?? r.verifier_score) * 100)}%`]);
-      rows.push([r.escalation_required ? '#E24B4A' : '#1D9E75', r.escalation_required ? 'Sent to human review' : 'Auto-resolved', r.escalation_required ? 'needs review' : 'complete']);
-      document.getElementById('last-trace').innerHTML = rows.map(row => `
-        <div class="trace-row"><span class="trace-dot" style="background:${row[0]}"></span><div>${html(row[1])}</div><div class="trace-outcome">${html(row[2])}</div></div>
-      `).join('') + `<div class="trace-meta">Ticket: <a class="linkish" href="${detailUrl(r.ticket_id)}">${html(r.ticket_id)}</a> · Routed in ${safeNum(r.latency_ms ?? r.routing_latency_ms)} ms · ${html(routeMeta(r.route_path).label)}</div>`;
-    }
-
-    function renderConfidence(d, detail) {
-      const c = d.components || detail?.routing?.confidence_components || {};
-      const values = {
-        classification_confidence: safeNum(c.classification_confidence ?? c.classification),
-        retrieval_similarity: safeNum(c.retrieval_similarity),
-        verifier_score: safeNum(c.verifier_score),
-        privacy_score: safeNum(c.privacy_score ?? (c.privacy_risk != null ? 1 - c.privacy_risk : 0)),
-      };
-      const rows = [
-        ['Classification', '20%', values.classification_confidence, '#1D9E75'],
-        ['RAG evidence', '20%', values.retrieval_similarity, '#378ADD'],
-        ['LLM decision', '50%', values.verifier_score, '#7c3aed'],
-        ['Privacy safety', '10%', values.privacy_score, '#BA7517'],
-      ];
-      const overall = detail?.routing?.confidence_score ?? d.avgConfidence;
-      const overallPct = pct(overall);
-      document.getElementById('confidence-breakdown').innerHTML = rows.map(([label, weight, value, color]) => {
-        const p = pct(value);
-        return `<div class="confidence-row">
-          <div class="label">${label} (${weight})</div>
-          <div class="bar-track"><span class="bar-fill" style="width:${clamp(p, 0, 100)}%;background:${color}"></span></div>
-          <div class="bar-num">${p}%</div>
+      const title = detail.ticket?.short_description || r.ticket_id;
+      const reason = r.knowledge_gap?.is_gap ? r.knowledge_gap.reason : (r.escalation_required ? 'Human review required by AI decision' : 'AI found enough evidence to proceed');
+      const why = r.route_explanation?.[0]?.impact || r.route_explanation?.[0]?.value || r.knowledge_gap?.reason || (r.matched_ticket_id ? `Matched approved ticket ${r.matched_ticket_id}` : 'Decision stored with route evidence');
+      document.getElementById('latest-decision').innerHTML = `
+        <div class="decision-card">
+          <div class="decision-title">${html(title)}</div>
+          <div class="decision-row"><div class="decision-key">Ticket</div><div><a class="linkish" href="${detailUrl(r.ticket_id)}">${html(r.ticket_id)}</a></div></div>
+          <div class="decision-row"><div class="decision-key">Reason</div><div>${html(reason)}</div></div>
+          <div class="decision-row"><div class="decision-key">Confidence</div><div style="font-weight:800;color:${confidenceColor(pct(r.confidence_score))}">${pct(r.confidence_score)}%</div></div>
+          <div class="decision-row"><div class="decision-key">Route</div><div>${routePill(r.route_path)}</div></div>
+          <div class="decision-row"><div class="decision-key">Why</div><div>${html(why)}</div></div>
         </div>`;
-      }).join('') + `<div class="formula">Final score = (classification × 0.20) + (RAG evidence × 0.20) + (LLM decision × 0.50) + (privacy × 0.10)</div>
-      <div class="overall-score" style="color:${confidenceColor(overallPct)}">Overall: ${overallPct}%</div>`;
     }
 
-    function getHeatmapGrid(total) {
-      const days = [0, 1, 2, 3, 4, 5, 6];
-      const slots = [0, 6, 12, 18];
-      let max = 0;
-      const grid = slots.map(hour => days.map(day => {
-        const v = safeNum(sessionStorage.getItem(`heatmap_hour_${day}_${hour}`));
-        max = Math.max(max, v);
-        return v;
-      }));
-      let estimated = false;
-      if (!max && total > 0) {
-        estimated = true;
-        const base = Math.max(1, Math.floor(total / 28));
-        grid.forEach((row, r) => row.forEach((_, c) => {
-          row[c] = base + ((r + c) % 3 === 0 ? 1 : 0);
-          max = Math.max(max, row[c]);
-        }));
-      }
-      return { grid, max: max || 1, estimated };
+    function privacyCountBy(d, patterns) {
+      return (d.privacyByType || []).reduce((sum, row) => {
+        const name = String(row.entity_type || '').toLowerCase();
+        return patterns.some(pattern => name.includes(pattern)) ? sum + safeNum(row.count) : sum;
+      }, 0);
     }
 
-    function renderHeatmap(d) {
-      const { grid, max, estimated } = getHeatmapGrid(d.total);
-      const days = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-      const slots = ['00 h', '06 h', '12 h', '18 h'];
-      let htmlOut = '<div class="heatmap-wrap"><div></div>' + days.map(day => `<div class="heat-day">${day}</div>`).join('');
-      grid.forEach((row, r) => {
-        htmlOut += `<div class="heat-label">${slots[r]}</div>`;
-        row.forEach(count => {
-          const opacity = clamp(count / max, .08, 1);
-          htmlOut += `<div class="heat-cell" title="${count} tickets" style="background:rgba(55, 138, 221, ${opacity})"></div>`;
-        });
-      });
-      htmlOut += '</div>';
-      if (estimated) htmlOut += '<div class="heat-note">Estimated — seeded from total</div>';
-      document.getElementById('activity-heatmap').innerHTML = htmlOut;
+    function renderPrivacySummary(d) {
+      const emails = privacyCountBy(d, ['email']);
+      const ips = privacyCountBy(d, ['ip']);
+      const credentials = privacyCountBy(d, ['credential', 'password', 'secret', 'token', 'key']);
+      const risk = credentials > 0 ? 'Elevated' : d.privacyCount > 25 ? 'Watch' : 'Low';
+      document.getElementById('privacy-summary').innerHTML = metricList([
+        { label: 'Emails redacted', value: emails.toLocaleString(), tone: 'good' },
+        { label: 'IPs redacted', value: ips.toLocaleString(), tone: 'good' },
+        { label: 'Credentials blocked', value: credentials.toLocaleString(), tone: credentials ? 'warn' : 'good' },
+        { label: 'Privacy risk score', value: risk, tone: risk === 'Low' ? 'good' : 'warn' },
+      ], `${d.privacyCount.toLocaleString()} total privacy findings protected before routing.`);
     }
 
-    function renderLatency(d) {
-      const lat = d.routeLatency || {};
-      const rows = ROUTES.map(r => ({ ...r, value: safeNum(lat[r.key] ?? lat[r.alt]) })).filter(r => r.value > 0);
-      if (!rows.length) {
-        document.getElementById('latency-by-route').innerHTML = '<div class="empty-copy">No response time data yet.</div>';
-        return;
-      }
-      const max = Math.max(...rows.map(r => r.value), 1);
-      const cache = rows.find(r => r.key === 'semantic_cache')?.value;
-      const rag = rows.find(r => r.key === 'generative_rag')?.value;
-      const ratio = cache && rag ? Math.max(1, Math.round(rag / cache)) : null;
-      document.getElementById('latency-by-route').innerHTML = rows.map(r => `
-        <div class="latency-row">
-          <div class="label">${html(r.short)}</div>
-          <div class="bar-track"><span class="bar-fill" style="width:${r.value / max * 100}%;background:${r.color}"></span></div>
-          <div class="bar-num">${formatLatency(r.value)}</div>
-        </div>`).join('') +
-        `<div style="font-size:12px;color:#374151;margin-top:10px">${ratio ? `Cache hits are ${ratio}× faster than AI-generated responses` : 'Cache and AI-generated latency comparison will appear after both routes run.'}</div>`;
+    function renderIntelligenceSummaries(intel, d) {
+      const summary = intel.summary || {};
+      const feedback = intel.feedback || {};
+      const byDecision = Object.fromEntries((feedback.by_decision || []).map(x => [String(x.decision || '').toLowerCase(), safeNum(x.count)]));
+      const approvals = safeNum(byDecision.approve) + safeNum(byDecision.approved) + safeNum(byDecision.accept) + safeNum(byDecision.accepted);
+      const corrections = safeNum(byDecision.corrected) + safeNum(byDecision.edit) + safeNum(byDecision.edited) + safeNum(byDecision.misrouted) + safeNum(byDecision.wrong_category) + safeNum(byDecision.wrong_resolution);
+      const rejected = safeNum(byDecision.reject) + safeNum(byDecision.rejected);
+      const reviewEvents = safeNum(feedback.total_events);
+      const approvedPct = reviewEvents ? approvals / reviewEvents * 100 : 0;
+      const correctedPct = reviewEvents ? corrections / reviewEvents * 100 : 0;
+      const rejectedPct = reviewEvents ? rejected / reviewEvents * 100 : 0;
+      const reviewerAccuracy = reviewEvents ? Math.max(0, 100 - safeNum(feedback.correction_rate) * 100) : pct(d.avgConfidence);
+      const hoursSaved = ((d.autoRouted * 8) + (d.cacheHits * 18)) / 60;
+      const escalationPrevented = Math.max(0, d.autoRouted - d.routeDistribution.out_of_distribution);
+
+      document.getElementById('ai-impact').innerHTML = metricList([
+        { label: 'Tickets processed', value: d.decisions.toLocaleString(), tone: 'good' },
+        { label: 'Human hours saved', value: `${hoursSaved.toFixed(1)}h`, tone: 'good' },
+        { label: 'Cache resolutions', value: d.cacheHits.toLocaleString(), tone: 'good' },
+        { label: 'Escalations prevented', value: escalationPrevented.toLocaleString(), tone: 'good' },
+        { label: 'Reviewer accuracy', value: `${Math.round(reviewerAccuracy)}%`, tone: reviewerAccuracy >= 85 ? 'good' : 'warn' },
+      ], 'Hours saved estimate uses auto-routed and cache-resolved tickets.');
+
+      const gaps = intel.knowledge_gaps || [];
+      const weakEvidence = safeNum(summary.knowledge_gap_count) || gaps.reduce((sum, gap) => sum + safeNum(gap.count), 0);
+      const noHistorical = gaps.reduce((sum, gap) => safeNum(gap.avg_retrieval_similarity) < .5 ? sum + safeNum(gap.count) : sum, 0);
+      document.getElementById('knowledge-coverage').innerHTML = metricList([
+        { label: 'Missing runbooks', value: gaps.length.toLocaleString(), tone: gaps.length ? 'warn' : 'good' },
+        { label: 'Weak evidence', value: weakEvidence.toLocaleString(), tone: weakEvidence ? 'warn' : 'good' },
+        { label: 'No historical match', value: noHistorical.toLocaleString(), tone: noHistorical ? 'warn' : 'good' },
+        { label: 'Needs human review', value: d.escalations.toLocaleString(), tone: d.escalations ? 'warn' : 'good' },
+      ], gaps[0]?.recommended_action || 'Knowledge gaps are summarized from routed decisions.');
+
+      document.getElementById('review-insights').innerHTML = metricList([
+        { label: 'Pending reviews', value: d.escalations.toLocaleString(), tone: d.escalations ? 'warn' : 'good' },
+        { label: 'Approved', value: reviewEvents ? `${approvedPct.toFixed(0)}%` : '—', tone: 'good' },
+        { label: 'Corrected', value: reviewEvents ? `${correctedPct.toFixed(0)}%` : '—', tone: correctedPct > 20 ? 'warn' : 'good' },
+        { label: 'Rejected', value: reviewEvents ? `${rejectedPct.toFixed(0)}%` : '—', tone: rejectedPct > 10 ? 'warn' : 'good' },
+      ], reviewEvents ? `${reviewEvents.toLocaleString()} reviewer feedback events captured.` : 'Reviewer outcomes appear after Human Review actions.');
     }
 
     async function fetchDashboard() {
@@ -911,12 +833,8 @@
         latestDashboard = await apiFetch('/v1/dashboard');
         const d = normalizeDashboard(latestDashboard);
         renderStats(d);
-        drawRouteChart(d);
         renderCategories(d);
-        renderConfidence(d, latestDetail);
-        renderHeatmap(d);
-        renderLatency(d);
-        renderWarnings();
+        renderPrivacySummary(d);
       } catch(e) {
         console.error(e);
         document.getElementById('stat-total').innerHTML = '<div class="inline-error">Could not load — retrying in 30 s</div>';
@@ -928,20 +846,22 @@
 
     async function fetchRiskQueue() {
       try {
-        const d = await apiFetch('/v1/intelligence/routing');
-        const queue = (d.sla_risk_queue || []).slice().sort((a, b) => safeNum(b.sla_risk_score || b.sla_risk?.score) - safeNum(a.sla_risk_score || a.sla_risk?.score));
-        const escCount = latestDashboard ? normalizeDashboard(latestDashboard).escalations : 0;
+        const intel = await apiFetch('/v1/intelligence/routing');
+        const dashboard = normalizeDashboard(latestDashboard || {});
+        renderIntelligenceSummaries(intel, dashboard);
+        const queue = (intel.sla_risk_queue || []).slice().sort((a, b) => safeNum(b.sla_risk_score || b.sla_risk?.score) - safeNum(a.sla_risk_score || a.sla_risk?.score));
+        const escCount = dashboard.escalations;
         document.getElementById('risk-count').textContent = `${escCount} escalation${escCount === 1 ? '' : 's'}`;
         if (!queue.length) {
           document.getElementById('risk-table').innerHTML = '<div class="empty-copy" style="padding:0 16px 16px">No tickets at risk right now.</div>';
           return;
         }
-        document.getElementById('risk-table').innerHTML = `<div class="table-scroll"><table>
+        document.getElementById('risk-table').innerHTML = `<div class="table-scroll"><table class="attention-table">
           <thead><tr><th>Ticket</th><th>Short description</th><th>Category</th><th>Route</th><th>Confidence</th><th>SLA risk</th><th>Action</th></tr></thead>
           <tbody>${queue.slice(0, 5).map(t => {
             const risk = safeNum(t.sla_risk_score || t.sla_risk?.score);
             const conf = pct(t.confidence_score);
-            const riskBg = risk > .8 ? '#fef2f2' : risk > .5 ? '#fffbeb' : 'transparent';
+            const riskBg = risk > .8 ? '#dbeafe' : risk > .5 ? '#eff6ff' : 'transparent';
             return `<tr>
               <td><a class="linkish" href="${detailUrl(t.ticket_id)}">${html(t.ticket_id)}</a></td>
               <td class="truncate" title="${html(t.short_description || '')}">${html((t.short_description || '').slice(0, 45))}${(t.short_description || '').length > 45 ? '...' : ''}</td>
@@ -955,6 +875,9 @@
       } catch(e) {
         console.error(e);
         document.getElementById('risk-table').innerHTML = '<div class="inline-error" style="padding:0 16px 16px">Could not load — retrying in 60 s</div>';
+        ['ai-impact', 'knowledge-coverage', 'review-insights'].forEach(id => {
+          document.getElementById(id).innerHTML = '<div class="inline-error">Could not load — retrying in 60 s</div>';
+        });
       }
     }
 
@@ -970,7 +893,7 @@
         <td>${routePill(t.route_path)}</td>
         <td style="color:${confidenceColor(conf)};font-weight:700">${t.confidence_score != null ? conf + '%' : '—'}</td>
         <td style="color:${riskTextColor(level)};font-weight:700">${html(level || 'normal')}</td>
-        <td>${redactions ? `<a class="linkish" onclick="event.stopPropagation()" href="${privacyUrl(id)}" style="color:#E24B4A">${redactions} items</a>` : '—'}</td>
+        <td>${redactions ? `<a class="linkish" onclick="event.stopPropagation()" href="${privacyUrl(id)}" style="color:#93c5fd">${redactions} items</a>` : '—'}</td>
         <td class="relative-time" data-created-at="${html(t.created_at || '')}">${relativeTime(t.created_at)}</td>
       </tr>`;
     }
@@ -1039,7 +962,7 @@
         out.innerHTML = `→ ${html(route)} · ${Math.round(safeNum(res.confidence_score) * 100)}% confidence${res.matched_ticket_id ? ` · ${html(res.matched_ticket_id)} matched` : ''}`;
         input.value = '';
         setTimeout(() => { if (out.classList.contains('ok')) out.textContent = ''; }, 10000);
-        await Promise.all([fetchDashboard(), fetchLastTrace(), fetchRiskQueue(), fetchRecentTickets()]);
+        await refreshAll();
       } catch(e) {
         console.error(e);
         out.className = 'quick-result err';
@@ -1064,41 +987,19 @@
       });
     }
 
-    function connectHeatmapStream() {
-      try {
-        stream = apiStream('/v1/tickets/stream?interval_ms=5000&window=50', event => {
-          if (!event?.ticket_id) return;
-          const now = new Date();
-          const day = (now.getDay() + 6) % 7;
-          const hour = Math.floor(now.getHours() / 6) * 6;
-          const key = `heatmap_hour_${day}_${hour}`;
-          sessionStorage.setItem(key, String(safeNum(sessionStorage.getItem(key)) + 1));
-          if (latestDashboard) renderHeatmap(normalizeDashboard(latestDashboard));
-        }, () => {});
-      } catch {}
-    }
-
     async function refreshAll() {
-      await Promise.all([fetchHealth(), fetchDashboard(), fetchLastTrace(), fetchRiskQueue(), fetchRecentTickets()]);
+      await fetchDashboard();
+      await Promise.all([fetchLastTrace(), fetchRiskQueue(), fetchRecentTickets()]);
     }
 
     document.getElementById('quick-route-form').addEventListener('submit', quickRoute);
-    document.getElementById('dismiss-warning').addEventListener('click', () => {
-      const banner = document.getElementById('health-warning');
-      if (banner.dataset.dismissKey) sessionStorage.setItem(banner.dataset.dismissKey, '1');
-      banner.classList.remove('show');
-    });
     document.getElementById('refresh-ring').addEventListener('click', refreshAll);
-    window.addEventListener('resize', () => latestDashboard && drawRouteChart(normalizeDashboard(latestDashboard)));
     window.addEventListener('beforeunload', () => {
       intervals.forEach(clearInterval);
-      stream?.close?.();
     });
 
     initPage();
     refreshAll();
-    connectHeatmapStream();
-    setTimer(fetchHealth, 60000);
     setTimer(fetchDashboard, 30000);
     setTimer(() => { fetchRiskQueue(); fetchRecentTickets(); }, 60000);
     setTimer(fetchLastTrace, 30000);

@@ -4,7 +4,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from app.agent import RoutingAgent
+from app.agent import RoutingAgent, keyword_category
 from app.clickhouse_repo import RetrievedTicket
 from app.llm import ResolutionDecision
 
@@ -106,6 +106,94 @@ def test_fast_path_eligibility_requires_curated_source():
     assert agent._is_fast_path_eligible(curated_ticket)
 
 
+def test_payment_gateway_timeout_is_application_not_network():
+    category, confidence = keyword_category(
+        "Payment Gateway Timeout during money transfer. "
+        "Payment Failed: 503 Gateway Timeout and the Payments API appears unavailable."
+    )
+
+    assert category == "Application"
+    assert confidence > 0.6
+
+
+def test_plain_network_timeout_still_routes_to_network():
+    category, confidence = keyword_category("VPN timeout and high latency through the office router")
+
+    assert category == "Network"
+    assert confidence > 0.6
+
+
+def test_bearer_token_exposure_raises_privacy_risk():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    state = {
+        "raw_text": "Checkout failures include an unredacted bearer token in debug header.",
+        "sanitized_text": "Checkout failures include an unredacted bearer token in debug header.",
+        "redacted_count": 0,
+        "privacy_audit": {"findings": []},
+    }
+
+    assert "Bearer token exposure" in agent._security_findings(state)
+    assert agent._privacy_risk(state) >= 0.35
+
+
+def test_password_reset_is_not_credential_exposure():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    state = {
+        "request": SimpleNamespace(urgency=3, impact=3),
+        "raw_text": "VPN login fails after password reset",
+        "sanitized_text": "VPN login fails after password reset",
+        "redacted_count": 0,
+        "privacy_audit": {"findings": []},
+    }
+
+    assert agent._security_findings(state) == []
+    assert agent._human_review_reason(state) is None
+
+
+def test_password_value_still_requires_security_review():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    state = {
+        "request": SimpleNamespace(urgency=3, impact=3),
+        "raw_text": "VPN ticket includes password=TempPass123 in logs",
+        "sanitized_text": "VPN ticket includes [CREDENTIAL_1] in logs",
+        "redacted_count": 1,
+        "privacy_audit": {"findings": [{"entity_type": "CREDENTIAL", "confidence": 0.97}]},
+    }
+
+    assert "Credential exposure" in agent._security_findings(state)
+    assert agent._human_review_reason(state) == "credential exposure requires security review"
+
+
+def test_application_payment_fallback_routes_to_payments_engineering():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    state = {
+        "assigned_category": "Application",
+        "sanitized_text": "Checkout timeout in payment orchestration with database deadlocks.",
+        "raw_text": "Checkout timeout in payment orchestration with database deadlocks.",
+        "retrieved": [],
+        "redacted_count": 0,
+        "privacy_audit": {"findings": []},
+    }
+
+    recommendation = agent._resolver_recommendation(state)
+
+    assert recommendation["group"] == "Payments Engineering"
+    assert recommendation["source"] == "category_default"
+
+
+def test_out_of_scope_ticket_still_requires_human_review():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    state = {
+        "request": SimpleNamespace(urgency=3, impact=3),
+        "sanitized_text": "Please arrange cafeteria lunch for the product event",
+        "raw_text": "Please arrange cafeteria lunch for the product event",
+        "redacted_count": 0,
+        "privacy_audit": {"findings": []},
+    }
+
+    assert agent._human_review_reason(state) == "outside supported IT incident scope"
+
+
 @pytest.mark.asyncio
 async def test_llm_resolution_node_uses_llm_below_semantic_cache_threshold():
     agent = RoutingAgent.__new__(RoutingAgent)
@@ -152,6 +240,7 @@ async def test_llm_resolution_node_uses_llm_below_semantic_cache_threshold():
     assert result["suggested_resolution"] == ["LLM-generated resolution step"]
     assert result["escalation_required"] is False
     assert result["route_path"] == "generative_rag"
+    assert result["confidence_score"] == pytest.approx(0.35 * 0.90 + 0.35 * 0.91 + 0.20 * 0.94 + 0.10)
 
 
 @pytest.mark.asyncio
@@ -198,6 +287,45 @@ async def test_llm_decision_can_escalate_even_when_similarity_is_not_low():
     assert result["verifier_score"] == 0.88
     assert result["escalation_required"] is True
     assert result["route_path"] == "human_review_required"
+
+
+@pytest.mark.asyncio
+async def test_low_confidence_llm_review_without_policy_risk_auto_routes():
+    agent = RoutingAgent.__new__(RoutingAgent)
+    agent.llm = SimpleNamespace(
+        resolve_and_decide=lambda **_: ResolutionDecision(
+            resolution_steps=[
+                "Verify the user completed the VPN password reset procedure.",
+                "Check VPN authentication policy and account synchronization status.",
+                "Ask Network Ops to validate gateway authentication logs.",
+            ],
+            escalation_required=True,
+            confidence_score=0.20,
+            rationale="No historical context was retrieved.",
+        ),
+    )
+    agent.settings = SimpleNamespace(rag_similarity_threshold=0.70)
+    state = {
+        "request": SimpleNamespace(urgency=3, impact=3),
+        "sanitized_text": "VPN login fails after password reset",
+        "raw_text": "VPN login fails after password reset",
+        "assigned_category": "Network",
+        "classification_confidence": 0.62,
+        "retrieval_similarity": 0.0,
+        "redacted_count": 0,
+        "privacy_audit": {"findings": []},
+        "retrieved": [],
+        "route_path": "retrieved",
+        "semantic_cache_hit": False,
+        "matched_ticket_id": None,
+        "rag_evidence": {"quality_band": "none", "quality_score": 0.0, "evidence_count": 0},
+    }
+
+    result = await agent._llm_resolution_node(state)
+
+    assert result["escalation_required"] is False
+    assert result["route_path"] == "generative_rag"
+    assert "sparse" in result["escalation_rationale"]
 
 
 @pytest.mark.asyncio

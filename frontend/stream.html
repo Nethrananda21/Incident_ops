@@ -3,13 +3,15 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // TICKET STREAM</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Ticket Stream</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
 .stream-thead {
   display:grid;grid-template-columns:minmax(165px,.9fr) minmax(280px,2fr) minmax(120px,.7fr) minmax(120px,.7fr) 70px 70px minmax(130px,.75fr) 110px;
   padding:8px 16px;border-bottom:1.5px solid var(--border);gap:10px;
   min-width:1080px;
+  background:linear-gradient(180deg,var(--bg1),var(--bg2));
+  position:sticky;top:0;z-index:2;
 }
 .stream-thead span { font-family:var(--mono);font-size:9px;color:var(--text3);letter-spacing:0.1em;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
 .ticket-row {
@@ -19,50 +21,58 @@
   min-width:1080px;
 }
 .ticket-row > span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.ticket-row:hover { background:var(--bg2); }
+.ticket-row:hover { background:#eef6ff; }
 @keyframes row-in { from{opacity:0;transform:translateY(-6px)} to{opacity:1;transform:none} }
 .ticket-row.new { animation:row-in .3s ease; }
 .stat-pill {
-  display:inline-flex;align-items:center;gap:6px;padding:4px 12px;
+  display:inline-flex;align-items:center;gap:10px;padding:8px 18px;
   border:1px solid var(--border2);border-radius:999px;
-  font-family:var(--mono);font-size:10px;color:var(--text2);background:var(--bg2);
+  font-family:var(--mono);font-size:13px;color:var(--text2);background:var(--bg2);
+  min-width:120px;justify-content:center;
+  box-shadow:var(--surface-ring),var(--shadow-xs);
 }
 .stat-pill strong { color:var(--text);font-weight:700; }
+.stream-stats {
+  display:flex;
+  gap:12px;
+  flex-wrap:wrap;
+  margin-top:12px;
+}
 </style>
 </head>
 <body>
 <div id="topbar">
   <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
   <div class="center">
-    <div class="page-title">TICKET STREAM // LIVE FEED</div>
-    <div style="display:flex;gap:10px;margin-left:16px">
-      <span class="stat-pill"><span class="live-dot"></span><strong id="s-total">0</strong>&nbsp;received</span>
-      <span class="stat-pill">routed&nbsp;<strong id="s-routed">0</strong></span>
-      <span class="stat-pill">escalated&nbsp;<strong id="s-esc" style="color:var(--critical)">0</strong></span>
-    </div>
+    <div class="page-title">Ticket Stream</div>
   </div>
   <div class="right">
-    <div id="status-pill"><div class="dot"></div><span id="conn-label">CONNECTING</span></div>
+      <div id="status-pill"><div class="dot"></div><span>Status</span></div>
     <div id="utc-clock">00:00:00 UTC</div>
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item active" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
 </nav>
 <main id="main">
   <div class="page-header">
-    <h1>TICKET STREAM // LIVE FEED</h1>
-    <p><span class="live-dot"></span><span class="live-label">SSE · <span style="font-family:var(--mono)">GET /v1/tickets/stream</span> · click ticket to open full detail</span></p>
+    <h1>Ticket Stream</h1>
+    <p><span class="live-dot"></span><span class="live-label">Live feed · click a ticket to open full detail</span></p>
+    <div class="stream-stats" aria-label="Ticket stream summary">
+      <span class="stat-pill"><span class="live-dot"></span><strong id="s-total">0</strong>&nbsp;received</span>
+      <span class="stat-pill">routed&nbsp;<strong id="s-routed">0</strong></span>
+      <span class="stat-pill">escalated&nbsp;<strong id="s-esc" style="color:var(--critical)">0</strong></span>
+    </div>
   </div>
   <div id="stream-error"></div>
 
@@ -102,13 +112,13 @@
 <div class="modal-overlay" id="ticket-modal">
   <div class="modal-box">
     <div class="modal-header">
-      <div class="modal-title" id="modal-ticket-id">TICKET //</div>
+      <div class="modal-title" id="modal-ticket-id">Ticket</div>
       <button class="modal-close" onclick="closeModal()">✕</button>
     </div>
     <div id="modal-content"></div>
   </div>
 </div>
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 let events = [];   // all received events
 let es = null;     // EventSource
@@ -145,9 +155,8 @@ function refreshStreamView() {
 }
 
 function setConn(label, ok) {
-  document.getElementById('conn-label').textContent = label;
-  const dot = document.querySelector('#status-pill .dot');
-  if(dot) dot.style.background = ok ? 'var(--ok)' : 'var(--critical)';
+  const liveLabel = document.querySelector('.live-label');
+  if (liveLabel) liveLabel.textContent = `${label.toLowerCase()} feed · click a ticket to open full detail`;
 }
 
 function updateStats() {

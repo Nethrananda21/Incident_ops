@@ -4,7 +4,12 @@
 
 function getApiBase() {
   const saved = localStorage.getItem('ops_api_base');
-  if (saved) return saved;
+  if (saved) {
+    const hosted = location.protocol === 'http:' || location.protocol === 'https:';
+    const staleLocal = /^https?:\/\/(localhost|127\.0\.0\.1):8000\/?$/.test(saved);
+    if (!hosted || !staleLocal) return saved;
+    localStorage.removeItem('ops_api_base');
+  }
   if (location.protocol === 'http:' || location.protocol === 'https:') return '/api';
   return 'http://localhost:8000';
 }
@@ -16,8 +21,9 @@ class ApiError extends Error {
 }
 
 async function apiFetch(path, opts = {}) {
+  const base = API_BASE;
   try {
-    const res = await fetch(API_BASE + path, {
+    const res = await fetch(base + path, {
       headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts,
     });
     if (!res.ok) {
@@ -27,17 +33,52 @@ async function apiFetch(path, opts = {}) {
     return await res.json();
   } catch (e) {
     if (e instanceof ApiError) throw e;
+    if ((location.protocol === 'http:' || location.protocol === 'https:') && base !== '/api') {
+      API_BASE = '/api';
+      localStorage.removeItem('ops_api_base');
+      try {
+        const res = await fetch(API_BASE + path, {
+          headers: { 'Content-Type': 'application/json', ...opts.headers }, ...opts,
+        });
+        if (!res.ok) {
+          const body = await res.json().catch(() => ({}));
+          throw new ApiError(res.status, body.detail || res.statusText);
+        }
+        return await res.json();
+      } catch (fallbackErr) {
+        if (fallbackErr instanceof ApiError) throw fallbackErr;
+      }
+    }
     throw new ApiError(0, `Cannot reach backend · ${e.message}`);
   }
 }
 
 function apiStream(path, onEvent, onError) {
-  const es = new EventSource(API_BASE + path);
+  if ((location.protocol === 'http:' || location.protocol === 'https:') && /^https?:\/\/(localhost|127\.0\.0\.1):8000\/?$/.test(API_BASE)) {
+    API_BASE = '/api';
+    localStorage.removeItem('ops_api_base');
+  }
+  let retriedProxy = false;
+  const makeStream = () => new EventSource(API_BASE + path);
+  let es = makeStream();
   const handle = ev => { try { onEvent(JSON.parse(ev.data)); } catch(err) { onError?.(err); } };
   es.onmessage = handle;
   es.addEventListener('ticket', handle);
-  es.onerror = () => onError?.(new ApiError(0, 'Stream disconnected'));
-  return es;
+  es.onerror = () => {
+    if ((location.protocol === 'http:' || location.protocol === 'https:') && API_BASE !== '/api' && !retriedProxy) {
+      retriedProxy = true;
+      es.close();
+      API_BASE = '/api';
+      localStorage.removeItem('ops_api_base');
+      es = makeStream();
+      es.onmessage = handle;
+      es.addEventListener('ticket', handle);
+      es.onerror = () => onError?.(new ApiError(0, 'Stream disconnected'));
+      return;
+    }
+    onError?.(new ApiError(0, 'Stream disconnected'));
+  };
+  return { close: () => es.close(), addEventListener: (...args) => es.addEventListener(...args) };
 }
 
 /* ── LOADING / ERROR ── */
@@ -45,7 +86,7 @@ function showError(id, message, status = '') {
   const el = document.getElementById(id);
   if (!el) return;
   el.innerHTML = `<div class="api-error" style="display:flex;align-items:flex-start;gap:12px;padding:16px 20px;
-    border:1px solid #fca5a5;background:#fff5f5;border-radius:8px;margin-bottom:12px">
+    border:1px solid #bfdbfe;background:#eff6ff;border-radius:8px;margin-bottom:12px">
     <span style="color:var(--critical);font-size:18px;flex-shrink:0">⚠</span>
     <div style="font-size:12px">
       <div style="font-weight:700;color:var(--critical);font-family:var(--mono);letter-spacing:.08em">BACKEND ERROR${status?' '+status:''}</div>
@@ -154,11 +195,21 @@ function normalizeTicketPayload(payload = {}) {
     p.retrieval_similarity, routing.retrieval_similarity,
     cc.retrieval_similarity, matched.retrieval_similarity
   ));
+  const ragEvidenceQuality = asNumber(firstDefined(
+    cc.rag_evidence_quality, p.rag_evidence?.quality_score, routing.rag_evidence?.quality_score
+  ));
+  const historicalSimilarity = asNumber(firstDefined(
+    cc.historical_similarity, retrieval
+  ));
   const verifier = asNumber(firstDefined(
     p.verifier_score, routing.verifier_score, cc.verifier_score
   ));
   const privacyRisk = asNumber(firstDefined(
     p.privacy_risk, routing.privacy_risk, cc.privacy_risk
+  ));
+  const riskModifier = asNumber(firstDefined(
+    cc.risk_modifier,
+    privacyRisk != null ? (privacyRisk >= .35 ? .40 : privacyRisk > .15 ? .70 : 1) : undefined
   ));
   const slaRisk = asNumber(firstDefined(
     typeof slaObj === 'object' ? slaObj.score : slaObj,
@@ -189,8 +240,11 @@ function normalizeTicketPayload(payload = {}) {
       classification,
       classification_confidence: classification,
       retrieval_similarity: retrieval,
+      rag_evidence_quality: ragEvidenceQuality,
+      historical_similarity: historicalSimilarity,
       verifier_score: verifier,
       privacy_risk: privacyRisk,
+      risk_modifier: riskModifier,
     },
     retrieval_similarity: retrieval,
     verifier_score: verifier,
@@ -246,7 +300,7 @@ function countUp(id, target, suffix='', dur=700) {
 function routePathBadge(path) {
   if(!path) return '<span style="color:var(--text3);font-size:10px">—</span>';
   const C={semantic_cache:'var(--ok)',generative_rag:'var(--accent)',out_of_distribution:'var(--warn)',human_review_required:'var(--critical)'};
-  const B={semantic_cache:'#f0fdf4',generative_rag:'#eff6ff',out_of_distribution:'#fffbeb',human_review_required:'#fff5f5'};
+  const B={semantic_cache:'#eff6ff',generative_rag:'#dbeafe',out_of_distribution:'#f8fbff',human_review_required:'#eef6ff'};
   const c=C[path]||'var(--text3)';
   const label=String(path).replace(/_/g,' ');
   return `<span class="route-path-badge" title="${html(label)}" style="font-family:var(--mono);font-size:10px;font-weight:600;letter-spacing:.06em;color:${c};border:1px solid ${c};border-radius:3px;padding:2px 7px;background:${B[path]||'var(--bg2)'}">${html(label)}</span>`;
@@ -283,6 +337,12 @@ function startAutoRefresh(callback, defaultSeconds = 30) {
   const saved = Number(localStorage.getItem('ops_refresh') || defaultSeconds);
   if (!Number.isFinite(saved) || saved <= 0) return null;
   return setInterval(callback, saved * 1000);
+}
+
+function setTimer(fn, ms) {
+  const saved = Number(localStorage.getItem('ops_refresh') || '');
+  if (Number.isFinite(saved) && saved <= 0) return null;
+  return setInterval(fn, ms);
 }
 
 /* ══════════════════════════════════════════════════════
@@ -324,6 +384,7 @@ function buildDecisionTrace(t) {
   return `
     <div style="margin-top:16px">
       <div style="font-size:11px;font-weight:700;color:var(--text);letter-spacing:.08em;text-transform:uppercase;margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid var(--border)">Decision Trace</div>
+      ${t.route_explanation?`<div style="margin-bottom:14px">${t.route_explanation}</div>`:''}
       ${step(1,'Privacy Node',privColor,[
         ['Entities redacted', t.redacted_entities_count??'—'],
         ['Privacy risk',      fmtNum(t.privacy_risk,3)],
@@ -362,9 +423,10 @@ function buildConfidenceBreakdown(t) {
   t = normalizeTicketPayload(t);
   const cc = t.confidence_components || {};
   const clf  = cc.classification ?? cc.classification_confidence ?? t.confidence_score ?? null;
-  const ret  = cc.retrieval_similarity ?? t.retrieval_similarity ?? null;
+  const ret  = cc.rag_evidence_quality ?? cc.retrieval_similarity ?? t.retrieval_similarity ?? null;
+  const hist = cc.historical_similarity ?? cc.retrieval_similarity ?? t.retrieval_similarity ?? null;
   const ver  = cc.verifier_score ?? t.verifier_score ?? null;
-  const priv = t.privacy_risk != null ? (1 - t.privacy_risk) : null;
+  const risk = cc.risk_modifier ?? (t.privacy_risk != null ? (t.privacy_risk >= .35 ? .40 : t.privacy_risk > .15 ? .70 : 1) : null);
   const finalConfidence = t.confidence_score;
 
   function bar(label, val, gate, gateLabel, weight) {
@@ -385,8 +447,8 @@ function buildConfidenceBreakdown(t) {
       </div>`;
   }
 
-  const weightedSignal = [clf,ret,ver,priv].every(v=>v==null) ? null :
-    ((clf||0)*.20 + (ret||0)*.20 + (ver||0)*.50 + (priv||0)*.10);
+  const weightedSignal = [clf,ret,hist,risk].every(v=>v==null) ? null :
+    ((clf||0)*.35 + (ret||0)*.35 + (hist||0)*.20 + (risk||0)*.10);
   const finalColor = finalConfidence == null ? 'var(--text3)' : finalConfidence<.65?'var(--critical)':finalConfidence<.85?'var(--warn)':'var(--ok)';
 
   return `
@@ -402,16 +464,16 @@ function buildConfidenceBreakdown(t) {
           <div style="font-family:var(--mono);font-size:22px;font-weight:800;color:${weightedSignal==null?'var(--text3)':weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${weightedSignal!=null?Math.round(weightedSignal*100)+'%':'—'}</div>
         </div>
       </div>
-      ${bar('Classification Confidence', clf,  .65, '0.65', '0.20')}
-      ${bar('RAG Evidence',              ret,  .70, '0.70', '0.20')}
-      ${bar('LLM Decision Score',        ver,  .70, '0.70', '0.50')}
-      ${bar('Privacy Safety',            priv, .85, '0.85 (risk≤0.15)', '0.10')}
+      ${bar('Classification Confidence', clf,  .65, '0.65', '0.35')}
+      ${bar('RAG Evidence Quality',      ret,  .70, '0.70', '0.35')}
+      ${bar('Historical Similarity',     hist, .70, '0.70', '0.20')}
+      ${bar('Risk Modifier',             risk, .70, '0.70', '0.10')}
       <div style="background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:10px 12px;font-size:11px;margin-top:4px">
         <span style="color:var(--text3)">Formula: </span>
-        <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">0.20·clf + 0.20·rag + 0.50·llm + 0.10·privacy</span>
+        <span style="font-family:var(--mono);font-size:10px;color:var(--text2)">0.35·clf + 0.35·rag + 0.20·history + 0.10·risk</span>
         ${weightedSignal!=null?`<span style="float:right;font-weight:700;font-family:var(--mono);color:${weightedSignal<.65?'var(--critical)':weightedSignal<.85?'var(--warn)':'var(--ok)'}">${Math.round(weightedSignal*100)}%</span>`:''}
       </div>
-      <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-top:6px">Final backend confidence is authoritative. Similarity only controls the semantic cache bypass; all non-cache tickets are decided by the LLM with RAG evidence attached.</div>
+      <div style="font-size:10px;color:var(--text3);line-height:1.6;margin-top:6px">Risk modifies confidence but does not create evidence. Similarity only controls the semantic cache bypass; all non-cache tickets are decided by the LLM with RAG evidence attached.</div>
     </div>`;
 }
 
@@ -530,7 +592,7 @@ function buildMatchedEvidence(t) {
 function buildDetailContent(t) {
   t = normalizeTicketPayload(t);
   const confidenceEvidence = `${buildConfidenceBreakdown(t)}${buildMatchedEvidence(t)}`;
-  const decisionAudit = `${buildDecisionTrace(t)}${t.route_explanation ? `<div style="margin-top:14px;padding:12px;background:#eff6ff;border-left:3px solid var(--accent);border-radius:0 6px 6px 0;font-size:12px;color:var(--text2);line-height:1.7"><strong style="display:block;font-size:10px;color:var(--accent);letter-spacing:.08em;margin-bottom:4px">ROUTE EXPLANATION</strong>${t.route_explanation}</div>` : ''}`;
+  const decisionAudit = buildDecisionTrace(t);
   return `
     ${(t.short_description || t.description) ? `
     <div style="margin-bottom:16px;padding-bottom:14px;border-bottom:1px solid var(--border)">
@@ -587,7 +649,7 @@ async function renderHealthPanel(containerId) {
           ['Model',            !!h.model,                              h.model||'—'],
           ['Uptime',           h.uptime_seconds!=null,                 h.uptime_seconds!=null?Math.round(h.uptime_seconds)+'s':'—'],
         ].map(([label,status,note])=>`
-          <div style="background:${status?'#f0fdf4':'#fff5f5'};border:1px solid ${status?'#bbf7d0':'#fca5a5'};border-radius:8px;padding:14px">
+          <div style="background:${status?'#eff6ff':'#f8fbff'};border:1px solid ${status?'#bfdbfe':'#93c5fd'};border-radius:8px;padding:14px">
             <div style="font-size:10px;font-weight:600;color:var(--text3);letter-spacing:.08em;text-transform:uppercase;margin-bottom:6px">${label}</div>
             <div style="font-size:22px;font-weight:700;color:${c(status)}">${ok(status)}</div>
             <div style="font-size:10px;color:${c(status)};margin-top:4px">${note}</div>
@@ -595,7 +657,7 @@ async function renderHealthPanel(containerId) {
       </div>`;
   } catch(e) {
     el.innerHTML = `
-      <div style="background:#fff5f5;border:1px solid #fca5a5;border-radius:8px;padding:16px">
+      <div style="background:#eff6ff;border:1px solid #93c5fd;border-radius:8px;padding:16px">
         <div style="font-size:13px;font-weight:700;color:var(--critical);margin-bottom:12px">Backend Unavailable</div>
         <div style="font-size:12px;color:var(--text2);margin-bottom:14px">${e.message}</div>
         <div style="font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.08em;margin-bottom:8px">Setup Checklist</div>
@@ -618,11 +680,161 @@ async function refreshStatusPill() {
   };
   try {
     const h = await apiFetch('/v1/health');
-    if (h.status === 'ok') set('STATUS_OK', 'ok');
-    else set('DEGRADED', 'warn');
+    if (h.status === 'ok') set('Status', 'ok');
+    else set('Status', 'warn');
+    if (!document.getElementById('status-panel')?.classList.contains('open')) renderStatusPanel(h);
   } catch {
-    set('DISCONNECTED', 'fail');
+    set('Status', 'fail');
+    if (!document.getElementById('status-panel')?.classList.contains('open')) renderStatusPanel(null, 'API is unreachable');
   }
+}
+
+function statusState(ok, warn = false) {
+  if (ok) return 'ok';
+  return warn ? 'warn' : 'fail';
+}
+
+function statusRow(label, state, value, note = '') {
+  const stateText = state === 'ok' ? 'OK' : state === 'warn' ? 'WARN' : 'FAIL';
+  return `
+    <div class="status-check ${state}">
+      <span class="status-check-dot"></span>
+      <div>
+        <div class="status-check-label">${html(label)}</div>
+        <div class="status-check-note">${html(note || value || '—')}</div>
+      </div>
+      <span class="status-check-state">${stateText}</span>
+    </div>`;
+}
+
+async function getUsageSummary() {
+  try {
+    const d = await apiFetch('/v1/dashboard');
+    const routing = d.routing || {};
+    const toNum = v => Number.isFinite(Number(v)) ? Number(v) : 0;
+    const total = toNum(d.total_tickets ?? d.tickets_total);
+    const decisions = toNum(routing.decisions || d.routing_decisions_total);
+    const escalations = toNum(d.escalation_count ?? routing.escalations);
+    if (total || decisions || escalations) {
+      return `${total.toLocaleString()} tickets · ${decisions.toLocaleString()} routed · ${escalations.toLocaleString()} escalated`;
+    }
+    return 'No routed usage yet';
+  } catch {
+    return 'Usage unavailable';
+  }
+}
+
+async function refreshStatusDetails() {
+  const panel = document.getElementById('status-panel');
+  if (!panel) return;
+  panel.innerHTML = `
+    <div class="status-panel-head">
+      <div class="status-panel-title">Status</div>
+      <button class="status-panel-refresh" type="button" onclick="refreshStatusDetails()">Checking</button>
+    </div>
+    <div class="status-checks">
+      ${statusRow('API', 'warn', 'Checking', 'Requesting health endpoint')}
+      ${statusRow('Database', 'warn', 'Checking', 'Waiting for backend response')}
+      ${statusRow('LLM', 'warn', 'Checking', 'Checking model configuration')}
+      ${statusRow('Network', 'warn', 'Checking', 'Testing browser to API path')}
+      ${statusRow('Usage', 'warn', 'Checking', 'Reading dashboard counters')}
+    </div>`;
+  try {
+    const [h, usage] = await Promise.all([apiFetch('/v1/health'), getUsageSummary()]);
+    renderStatusPanel(h, '', usage);
+    const pill = document.getElementById('status-pill');
+    if (pill) {
+      pill.classList.remove('ok', 'warn', 'fail');
+      pill.classList.add(h.status === 'ok' ? 'ok' : 'warn');
+      const label = pill.querySelector('span');
+      if (label) label.textContent = 'Status';
+    }
+  } catch(e) {
+    renderStatusPanel(null, e.message || 'API is unreachable');
+    const pill = document.getElementById('status-pill');
+    if (pill) {
+      pill.classList.remove('ok', 'warn', 'fail');
+      pill.classList.add('fail');
+      const label = pill.querySelector('span');
+      if (label) label.textContent = 'Status';
+    }
+  }
+}
+
+function renderStatusPanel(h, error = '', usage = '') {
+  const panel = document.getElementById('status-panel');
+  if (!panel) return;
+  if (!h) {
+    panel.innerHTML = `
+      <div class="status-panel-head">
+        <div class="status-panel-title">Status</div>
+        <button class="status-panel-refresh" type="button" onclick="refreshStatusDetails()">Retry</button>
+      </div>
+      <div class="status-checks">
+        ${statusRow('API', 'fail', 'Disconnected', error || 'Health endpoint failed')}
+        ${statusRow('Database', 'warn', 'Unknown', 'Waiting for API')}
+        ${statusRow('LLM', 'warn', 'Unknown', 'Waiting for API')}
+        ${statusRow('Network', 'fail', 'Offline', `Base URL: ${API_BASE}`)}
+        ${statusRow('Usage', 'warn', 'Unknown', 'Usage requires API')}
+      </div>
+      <div class="status-panel-foot">Base URL: ${html(API_BASE)}</div>`;
+    return;
+  }
+  const apiOk = h.status === 'ok' || h.status === 'degraded';
+  const apiWarn = h.status === 'degraded';
+  const dbOk = !!h.clickhouse;
+  const llmOk = !!h.nvidia_configured;
+  const model = h.model || 'No model reported';
+  const uptime = h.uptime_seconds != null ? `${Math.round(h.uptime_seconds)}s uptime` : 'Uptime unavailable';
+  panel.innerHTML = `
+    <div class="status-panel-head">
+      <div class="status-panel-title">Status</div>
+      <button class="status-panel-refresh" type="button" onclick="refreshStatusDetails()">Recheck</button>
+    </div>
+    <div class="status-checks">
+      ${statusRow('API', statusState(apiOk, apiWarn), h.status || 'unknown', uptime)}
+      ${statusRow('Database', statusState(dbOk), dbOk ? 'connected' : 'unreachable', 'ClickHouse')}
+      ${statusRow('LLM', statusState(llmOk), llmOk ? 'configured' : 'missing key', model)}
+      ${statusRow('Network', statusState(apiOk), apiOk ? 'reachable' : 'blocked', `Browser → ${API_BASE}`)}
+      ${statusRow('Usage', usage === 'Usage unavailable' ? 'warn' : 'ok', usage || 'Ready', usage || 'Dashboard counters available')}
+      ${statusRow('Model', statusState(!!h.model, !h.model), h.model || 'unknown', llmOk ? 'Active inference target' : 'Configure NVIDIA_API_KEY')}
+    </div>
+    <div class="status-panel-foot">Base URL: ${html(API_BASE)}</div>`;
+}
+
+function initStatusPanel() {
+  const pill = document.getElementById('status-pill');
+  if (!pill || document.getElementById('status-panel')) return;
+  pill.setAttribute('role', 'button');
+  pill.setAttribute('tabindex', '0');
+  pill.setAttribute('aria-label', 'Open system status');
+  const panel = document.createElement('div');
+  panel.id = 'status-panel';
+  panel.innerHTML = `
+    <div class="status-panel-head">
+      <div class="status-panel-title">Status</div>
+      <button class="status-panel-refresh" type="button" onclick="refreshStatusDetails()">Check</button>
+    </div>
+    <div class="status-checks">
+      ${statusRow('API', 'warn', 'Waiting', 'Open to run checks')}
+    </div>`;
+  document.body.appendChild(panel);
+  const toggle = () => {
+    panel.classList.toggle('open');
+    if (panel.classList.contains('open')) refreshStatusDetails();
+  };
+  pill.addEventListener('click', toggle);
+  pill.addEventListener('keydown', e => {
+    if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      toggle();
+    }
+  });
+  document.addEventListener('click', e => {
+    if (!panel.classList.contains('open')) return;
+    if (panel.contains(e.target) || pill.contains(e.target)) return;
+    panel.classList.remove('open');
+  });
 }
 
 function initNavigationToggle() {
@@ -645,28 +857,43 @@ function initSharedNavigation() {
   if (!sidebar) return;
   const page = location.pathname.split('/').pop() || 'dashboard.html';
   const sections = [
-    ['OPERATIONS', [
+    ['Dashboard', [
       ['dashboard.html', 'Dashboard'],
+    ]],
+    ['Tickets', [
       ['stream.html', 'Ticket Stream'],
       ['routing.html', 'Routing Desk'],
+    ]],
+    ['Search', [
       ['search.html', 'Search'],
       ['ticket.html', 'Ticket Detail'],
     ]],
-    ['ANALYTICS', [
+    ['Insights', [
       ['intelligence.html', 'Intelligence'],
     ]],
-    ['DATA', [
+    ['Records', [
       ['knowledge.html', 'Knowledge Base'],
       ['privacy.html', 'Privacy Audit'],
       ['escalations.html', 'Human Review'],
     ]],
   ];
 
-  sidebar.innerHTML = sections.map(([title, links]) => `
-    <div class="nav-section">${title}</div>
-    ${links.map(([href, label]) => `
-      <a class="nav-item" href="${href}"><span>${label}</span></a>`).join('')}
-  `).join('');
+  sidebar.innerHTML = sections.map(([title, links]) => {
+    const active = links.some(([href]) => href === page || (page === '' && href === 'dashboard.html'));
+    if (links.length === 1) {
+      const [href] = links[0];
+      return `<a class="nav-menu-button ${active ? 'active' : ''}" href="${href}">${title}</a>`;
+    }
+    return `
+    <div class="nav-menu" aria-label="${title.toLowerCase()} pages">
+      <button class="nav-menu-button ${active ? 'active' : ''}" type="button">${title}</button>
+      <div class="nav-dropdown">
+        ${links.map(([href, label]) => `
+          <a class="nav-item" href="${href}"><span>${label}</span></a>`).join('')}
+      </div>
+    </div>
+  `;
+  }).join('');
 
   sidebar.querySelectorAll('.nav-item').forEach(link => {
     const href = link.getAttribute('href');
@@ -682,6 +909,7 @@ function initPage() {
   applySettings();
   initSharedNavigation();
   initNavigationToggle();
+  initStatusPanel();
   injectSettingsDrawer();
 
   function tick() {
@@ -690,6 +918,7 @@ function initPage() {
   }
   tick(); setInterval(tick,1000);
   refreshStatusPill();
+  setTimer(refreshStatusPill, 60000);
 
   document.getElementById('ticket-modal')?.addEventListener('click',e=>{
     if(e.target.id==='ticket-modal') closeModal();
@@ -728,7 +957,7 @@ function injectSettingsDrawer() {
   if (right) {
     const btn = document.createElement('button');
     btn.id = 'settings-btn'; btn.title = 'Settings';
-    btn.innerHTML = '&#9881;';
+    btn.textContent = 'Settings';
     btn.onclick = openSettings;
     right.prepend(btn);
   }
@@ -761,8 +990,8 @@ function injectSettingsDrawer() {
           <span class="sd-label">Accent color</span>
           <div class="sd-control" id="sd-accent">
             <button class="sd-chip" data-val="blue"  onclick="sdSet('ops_accent','blue',this,'sd-accent')">Blue</button>
-            <button class="sd-chip" data-val="green" onclick="sdSet('ops_accent','green',this,'sd-accent')">Green</button>
-            <button class="sd-chip" data-val="amber" onclick="sdSet('ops_accent','amber',this,'sd-accent')">Amber</button>
+            <button class="sd-chip" data-val="green" onclick="sdSet('ops_accent','green',this,'sd-accent')">Sky</button>
+            <button class="sd-chip" data-val="amber" onclick="sdSet('ops_accent','amber',this,'sd-accent')">Navy</button>
           </div>
         </div>
         <div class="sd-row">

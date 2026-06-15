@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import time
 import logging
+import re
 from collections import Counter
 from typing import TypedDict
 
@@ -41,6 +42,7 @@ class AgentState(TypedDict, total=False):
     route_path: str
     semantic_cache_hit: bool
     matched_ticket_id: str | None
+    security_findings: list[str]
     review_reason: str | None
     sla_risk_score: float
     sla_risk_level: str
@@ -162,6 +164,7 @@ class RoutingAgent:
                 "policy_version": "enterprise-ticket-policy-v1",
             }
         state["agent_state"] = "privacy_complete"
+        state["security_findings"] = self._security_findings(state)
         return state
 
     async def _retrieve_node(self, state: AgentState) -> AgentState:
@@ -211,7 +214,7 @@ class RoutingAgent:
         state["classification_confidence"] = 1.0
         state["verifier_score"] = 1.0
         state["privacy_risk"] = privacy_risk
-        state["confidence_score"] = round(max(0.0, min(1.0, 0.99 - privacy_risk * 0.10)), 4)
+        state["confidence_score"] = round(max(0.0, min(1.0, 0.99 - privacy_risk * 0.15)), 4)
         state["suggested_resolution"] = [matched.resolution]
         state["escalation_required"] = False
         state["route_path"] = "semantic_cache"
@@ -234,6 +237,7 @@ class RoutingAgent:
             category, confidence = keyword_category(state["sanitized_text"])
         state["assigned_category"] = normalize_category(category)
         state["classification_confidence"] = round(float(confidence), 4)
+        state["resolver_recommendation"] = self._resolver_recommendation(state)
         state["route_path"] = "generative_rag"
         state["semantic_cache_hit"] = False
         state["agent_state"] = "triage_complete"
@@ -251,20 +255,29 @@ class RoutingAgent:
             policy_signal=state.get("review_reason"),
         )
         privacy_risk = self._privacy_risk(state)
+        risk_modifier = self._risk_modifier(privacy_risk)
+        rag_quality = float(state.get("rag_evidence", {}).get("quality_score", 0.0))
         decision_confidence = round(decision.confidence_score, 4)
+        auto_resolved_review = self._should_auto_resolve_llm_review(state, decision, privacy_risk)
+        escalation_required = bool(decision.escalation_required and not auto_resolved_review)
         confidence = (
-            0.20 * state.get("classification_confidence", 0.0)
+            0.35 * state.get("classification_confidence", 0.0)
+            + 0.35 * max(0.0, min(1.0, rag_quality))
             + 0.20 * max(0.0, state.get("retrieval_similarity", 0.0))
-            + 0.50 * decision_confidence
-            + 0.10 * (1.0 - privacy_risk)
+            + 0.10 * risk_modifier
         )
         state["suggested_resolution"] = decision.resolution_steps
-        state["escalation_required"] = decision.escalation_required
-        state["escalation_rationale"] = decision.rationale
+        state["escalation_required"] = escalation_required
+        state["escalation_rationale"] = (
+            "LLM requested review because evidence was sparse, but no policy, security, privacy, or critical-risk signal matched."
+            if auto_resolved_review
+            else decision.rationale
+        )
         state["verifier_score"] = decision_confidence
         state["privacy_risk"] = round(privacy_risk, 4)
         state["confidence_score"] = round(max(0.0, min(1.0, confidence)), 4)
-        state["route_path"] = "human_review_required" if decision.escalation_required else "generative_rag"
+        state["resolver_recommendation"] = self._resolver_recommendation(state)
+        state["route_path"] = "human_review_required" if escalation_required else "generative_rag"
         state["semantic_cache_hit"] = False
         state["knowledge_gap"] = self._knowledge_gap_signal(state)
         self._refresh_operational_metadata(state)
@@ -291,8 +304,128 @@ class RoutingAgent:
     def _should_escalate(self, state: AgentState) -> str:
         return "escalate" if state.get("escalation_required") else "complete"
 
+    def _should_auto_resolve_llm_review(
+        self,
+        state: AgentState,
+        decision,
+        privacy_risk: float,
+    ) -> bool:
+        if not decision.escalation_required:
+            return False
+        if state.get("review_reason"):
+            return False
+        request = state["request"]
+        if request.urgency == 1 or request.impact == 1:
+            return False
+        if privacy_risk >= 0.35 or self._security_findings(state):
+            return False
+        if decision.confidence_score >= 0.70:
+            return False
+        if self._rationale_requires_review(decision.rationale):
+            return False
+        return self._resolution_steps_are_actionable(decision.resolution_steps)
+
+    def _rationale_requires_review(self, rationale: str) -> bool:
+        text = str(rationale or "").lower()
+        review_terms = [
+            "human authorization",
+            "manual authorization",
+            "outside supported",
+            "outside it",
+            "security",
+            "compliance",
+            "privacy",
+            "credential",
+            "token",
+            "payment",
+            "financial",
+            "data integrity",
+            "production risk",
+            "critical",
+        ]
+        return any(term in text for term in review_terms)
+
+    def _resolution_steps_are_actionable(self, steps: list[str]) -> bool:
+        if len([step for step in steps if str(step).strip()]) < 2:
+            return False
+        blocked_terms = [
+            "human review",
+            "human support triage",
+            "reviewer",
+            "manual review",
+            "escalate to human",
+        ]
+        combined = " ".join(str(step).lower() for step in steps)
+        return not any(term in combined for term in blocked_terms)
+
     def _privacy_risk(self, state: AgentState) -> float:
-        return round(min(0.4, state.get("redacted_count", 0) * 0.05), 4)
+        findings = state.get("privacy_audit", {}).get("findings", [])
+        sensitive_entities = {
+            "BEARER_TOKEN",
+            "CREDENTIAL",
+            "API_KEY",
+            "AWS_ACCESS_KEY",
+            "PRIVATE_KEY",
+            "JWT",
+            "OAUTH_TOKEN",
+        }
+        explicit_exposure = bool(self._security_findings(state))
+        entity_risk = 0.0
+        for finding in findings:
+            entity_type = str(finding.get("entity_type", "")).upper()
+            if entity_type in sensitive_entities:
+                entity_risk = max(entity_risk, 0.35)
+            elif entity_type in {"ACCOUNT_ID", "EMAIL", "PHONE_NUMBER"}:
+                entity_risk = max(entity_risk, 0.10)
+            elif entity_type:
+                entity_risk = max(entity_risk, 0.05)
+        count_risk = min(0.20, state.get("redacted_count", 0) * 0.04)
+        exposure_risk = 0.35 if explicit_exposure else 0.0
+        return round(min(0.95, max(entity_risk, exposure_risk) + count_risk), 4)
+
+    def _risk_modifier(self, privacy_risk: float) -> float:
+        if privacy_risk >= 0.35:
+            return 0.40
+        if privacy_risk > 0.15:
+            return 0.70
+        return 1.0
+
+    def _security_findings(self, state: AgentState) -> list[str]:
+        text = state.get("raw_text") or state.get("sanitized_text", "")
+        lowered = text.lower()
+        findings: list[str] = []
+        if (
+            any(term in lowered for term in ["bearer token", "authorization: bearer", "unredacted bearer"])
+            or re.search(r"\bbearer\s+[a-z0-9._~+/=\-]{12,}", lowered)
+        ):
+            findings.append("Bearer token exposure")
+        if any(term in lowered for term in ["oauth token", "oauth refresh token", "refresh token exposed", "refresh token leaked"]):
+            findings.append("OAuth token exposure")
+        if (
+            any(term in lowered for term in ["api key exposed", "api key leaked", "apikey exposed", "api_key exposed"])
+            or re.search(r"\bapi[_-]?key\s*[:=]\s*[^\s,;]{6,}", lowered)
+        ):
+            findings.append("API key exposure")
+        if any(term in lowered for term in ["jwt exposed", "jwt leaked", "json web token exposed", "json web token leaked"]):
+            findings.append("JWT exposure")
+        if (
+            any(
+                term in lowered
+                for term in [
+                    "credential exposure",
+                    "credentials exposed",
+                    "credential leaked",
+                    "credentials leaked",
+                    "password exposed",
+                    "password leaked",
+                    "hardcoded password",
+                    "hardcoded secret",
+                ]
+            )
+            or re.search(r"\b(?:password|passwd|pwd|secret)\s*[:=]\s*[^\s,;]{6,}", lowered)
+        ):
+            findings.append("Credential exposure")
+        return findings
 
     def _knowledge_gap_signal(self, state: AgentState) -> dict:
         evidence = state.get("rag_evidence", {})
@@ -413,7 +546,7 @@ class RoutingAgent:
         retrieved = state.get("retrieved", [])
         weights: Counter[str] = Counter()
         for item in retrieved:
-            if item.assignment_group and item.assignment_group != "Pending Review":
+            if item.assignment_group and item.assignment_group not in {"Pending Review", "IT Support"}:
                 weights[item.assignment_group] += max(item.similarity, 0.0)
         if weights:
             total = sum(weights.values()) or 1.0
@@ -424,19 +557,28 @@ class RoutingAgent:
                 "source": "retrieval_consensus",
                 "alternates": [name for name, _ in ranked[1:]],
             }
+        category = normalize_category(state.get("assigned_category", ""))
         fallback = {
             "Network": "Network Ops",
-            "Access Management": "IT Support",
-            "Security": "Security",
-            "Database": "IT Support",
-            "Storage": "IT Support",
-            "Infrastructure": "IT Support",
-            "Application": "IT Support",
+            "Access Management": "Identity and Access Management",
+            "Security": "Security Operations",
+            "Database": "DBA Team",
+            "Storage": "Storage Operations",
+            "Infrastructure": "Platform Engineering",
+            "Application": "Application Operations",
         }
-        group = fallback.get(state.get("assigned_category", ""), "IT Support")
+        text = state.get("sanitized_text", "").lower()
+        raw_text = state.get("raw_text", "").lower()
+        combined = f"{raw_text}\n{text}"
+        if category == "Application" and any(term in combined for term in ["payment", "checkout", "merchant", "orchestration"]):
+            group = "Payments Engineering"
+        elif state.get("privacy_risk", self._privacy_risk(state)) >= 0.35 and category == "Security":
+            group = "Security Operations"
+        else:
+            group = fallback.get(category, "Application Operations")
         return {
             "group": group,
-            "confidence": 0.45,
+            "confidence": 0.62 if group != "IT Support" else 0.45,
             "source": "category_default",
             "alternates": [],
         }
@@ -491,18 +633,28 @@ class RoutingAgent:
         resolver = state.get("resolver_recommendation", {})
         gap = state.get("knowledge_gap", {})
         evidence = state.get("rag_evidence", {})
+        security_findings = state.get("security_findings") or self._security_findings(state)
         route_path = state.get("route_path", "retrieved")
         if state.get("semantic_cache_hit"):
             route_impact = "approved historical resolution returned without invoking the LLM"
         elif state.get("escalation_required"):
             route_impact = state.get("escalation_rationale") or "LLM decision requires human review"
         else:
-            route_impact = "retrieved context was attached to the prompt and resolved by the LLM"
+            route_impact = state.get("escalation_rationale") or "retrieved context was attached to the prompt and resolved by the LLM"
         return [
             {
-                "label": "Privacy gate",
-                "value": f"{state.get('redacted_count', 0)} redactions",
-                "impact": "only sanitized text is available to retrieval and model calls",
+                "label": "Classifier agent",
+                "value": f"{state.get('assigned_category', 'Unassigned')} at {state.get('classification_confidence', 0.0):.2f}",
+                "impact": self._classifier_signal_summary(state),
+            },
+            {
+                "label": "Security agent",
+                "value": ", ".join(security_findings) if security_findings else f"{state.get('redacted_count', 0)} redactions",
+                "impact": (
+                    f"privacy risk {state.get('privacy_risk', self._privacy_risk(state)):.2f}; credentials force reviewer visibility"
+                    if security_findings
+                    else "only sanitized text is available to retrieval and model calls"
+                ),
             },
             {
                 "label": "Nearest approved ticket",
@@ -525,6 +677,11 @@ class RoutingAgent:
                 "impact": f"source: {resolver.get('source', 'unknown')}",
             },
             {
+                "label": "Confidence formula",
+                "value": f"{state.get('confidence_score', 0.0):.2f}",
+                "impact": "35% classifier + 35% RAG quality + 20% historical similarity + 10% risk modifier",
+            },
+            {
                 "label": "SLA risk",
                 "value": f"{state.get('sla_risk_level', 'normal')} at {state.get('sla_risk_score', 0.0):.2f}",
                 "impact": "priority, confidence, retrieval gap, LLM confidence gap, and privacy risk combined",
@@ -541,6 +698,25 @@ class RoutingAgent:
         text = state["sanitized_text"].lower()
         if request.urgency == 1 or request.impact == 1:
             return "critical urgency or impact requires human review"
+        if self._security_findings(state):
+            return "credential exposure requires security review"
+        out_of_scope_terms = [
+            "cafeteria",
+            "lunch",
+            "catering",
+            "company event",
+            "office event",
+            "facility",
+            "facilities",
+            "office admin",
+            "travel",
+            "payroll",
+            "human resources",
+            "procurement",
+            "purchase order",
+        ]
+        if any(term in text for term in out_of_scope_terms):
+            return "outside supported IT incident scope"
         high_risk_terms = [
             "unauthorized",
             "bulk export",
@@ -566,6 +742,24 @@ class RoutingAgent:
             return "security, compliance, payment, or production-risk signal matched"
         return None
 
+    def _classifier_signal_summary(self, state: AgentState) -> str:
+        text = state.get("sanitized_text", "").lower()
+        signals = []
+        for term in [
+            "checkout",
+            "payment",
+            "orchestration",
+            "oauth",
+            "deadlock",
+            "replica lag",
+            "timeout",
+            "database",
+            "waf",
+        ]:
+            if term in text:
+                signals.append(term)
+        return ", ".join(signals[:5]) if signals else "keyword and retrieved-category signals"
+
     def _to_response(self, state: AgentState) -> dict:
         retrieved = state.get("retrieved", [])
         return {
@@ -576,8 +770,11 @@ class RoutingAgent:
             "confidence_components": {
                 "classification": state.get("classification_confidence", 0.0),
                 "retrieval_similarity": state.get("retrieval_similarity", 0.0),
+                "rag_evidence_quality": state.get("rag_evidence", {}).get("quality_score", 0.0),
+                "historical_similarity": state.get("retrieval_similarity", 0.0),
                 "verifier_score": state.get("verifier_score", 0.0),
                 "privacy_risk": state.get("privacy_risk", 0.0),
+                "risk_modifier": self._risk_modifier(state.get("privacy_risk", 0.0)),
             },
             "escalation_required": state.get("escalation_required", True),
             "redacted_entities_count": state.get("redacted_count", 0),
@@ -599,11 +796,16 @@ class RoutingAgent:
 
     def _store_ticket(self, request: TicketRequest, state: AgentState) -> None:
         embedding = embed_text(state["sanitized_text"], self.settings.embedding_dim)
+        display_short_description, display_description = sanitized_ticket_fields(
+            request.short_description,
+            request.description,
+            state["sanitized_text"],
+        )
         record = TicketRecord(
             ticket_id=state["ticket_id"],
             number=request.number or state["ticket_id"],
-            short_description=request.short_description,
-            description=request.description,
+            short_description=display_short_description,
+            description=display_description,
             sanitized_text=state["sanitized_text"],
             category=state["assigned_category"],
             assignment_group=request.assignment_group or "Pending Review",
@@ -635,10 +837,43 @@ def normalize_category(category: str) -> str:
     return mapping.get(value, category.strip().title() or "Application")
 
 
+def sanitized_ticket_fields(short_description: str, description: str, sanitized_text: str) -> tuple[str, str]:
+    sanitized_text = str(sanitized_text or "").strip()
+    if sanitized_text:
+        parts = sanitized_text.split("\n\n", 1)
+        if len(parts) == 2:
+            return parts[0].strip(), parts[1].strip()
+
+    return (
+        redact_text(short_description or "").sanitized_text,
+        redact_text(description or "").sanitized_text,
+    )
+
+
 def keyword_category(text: str) -> tuple[str, float]:
     lowered = text.lower()
-    if any(word in lowered for word in ["vpn", "network", "latency", "timeout", "router", "switch"]):
+    application_terms = [
+        "api",
+        "application",
+        "app",
+        "gateway",
+        "payment",
+        "portal",
+        "service",
+        "transfer",
+        "upload",
+        "checkout",
+        "transaction",
+        "500",
+        "503",
+    ]
+    network_terms = ["vpn", "network", "latency", "router", "switch", "dns", "packet"]
+    if any(word in lowered for word in application_terms):
+        return "Application", 0.66
+    if any(word in lowered for word in network_terms):
         return "Network", 0.62
+    if "timeout" in lowered and not any(word in lowered for word in application_terms):
+        return "Network", 0.56
     if any(word in lowered for word in ["access", "permission", "login", "mfa", "password"]):
         return "Access Management", 0.62
     if any(word in lowered for word in ["database", "sql", "query", "replication"]):

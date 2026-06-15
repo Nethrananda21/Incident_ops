@@ -3,397 +3,830 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // USER TICKET PORTAL</title>
-<link rel="stylesheet" href="shared.css?v=20260514-raise2">
+<title>Finora Demo Portal</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
 body.user-ticket-portal {
-  height:auto;
   min-height:100vh;
+  height:auto;
   overflow-x:hidden;
   overflow-y:auto;
-  background:var(--bg);
+  --bg:#f5f7fb;
+  --panel:#fff;
+  --soft:#f0f4fb;
+  --line:#e5eaf2;
+  --text:#101828;
+  --muted:#667085;
+  --blue:#175cd3;
+  --blue2:#0b4db8;
+  --green:#079455;
+  --amber:#dc6803;
+  --red:#d92d20;
+  background:
+    linear-gradient(rgba(23,92,211,.055) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(23,92,211,.055) 1px, transparent 1px),
+    #f5f7fb;
+  background-size:32px 32px;
+  color:var(--text);
 }
-.portal-bar {
-  height:64px;
+.site-shell {
+  max-width:1240px;
+  margin:0 auto;
+  padding:22px;
+}
+.site-header {
+  min-height:74px;
+  display:grid;
+  grid-template-columns:auto minmax(0,1fr) auto;
+  align-items:center;
+  gap:22px;
+  padding:14px 18px;
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:rgba(255,255,255,.92);
+  box-shadow:0 18px 45px rgba(16,24,40,.08);
+  position:sticky;
+  top:14px;
+  z-index:10;
+  backdrop-filter:blur(14px);
+}
+.brand {
   display:flex;
   align-items:center;
-  justify-content:space-between;
-  gap:18px;
-  padding:0 28px;
-  background:var(--bg1);
-  border-bottom:1px solid var(--border);
+  gap:12px;
 }
-.portal-brand strong {
+.brand-mark {
+  width:42px;
+  height:42px;
+  border-radius:14px;
+  display:grid;
+  place-items:center;
+  background:linear-gradient(135deg,#175cd3,#84caff);
+  color:#fff;
+  font-weight:950;
+}
+.brand strong {
   display:block;
-  color:var(--text);
-  font-size:15px;
-  font-weight:800;
+  font-size:17px;
   letter-spacing:0;
 }
-.portal-brand span {
+.brand span {
   display:block;
-  color:var(--text3);
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:.08em;
-  text-transform:uppercase;
-  margin-top:2px;
+  color:var(--muted);
+  font-size:12px;
+  font-weight:750;
 }
-.portal-health {
-  display:inline-flex;
-  align-items:center;
+.nav-tabs {
+  display:flex;
+  justify-content:center;
   gap:7px;
-  padding:6px 11px;
-  border:1px solid #bbf7d0;
-  border-radius:6px;
-  background:#f0fdf4;
-  color:var(--ok);
-  font-size:11px;
-  font-weight:700;
-  white-space:nowrap;
-}
-.portal-health::before {
-  content:"";
-  width:7px;
-  height:7px;
-  border-radius:999px;
-  background:var(--ok);
-}
-.portal-main {
-  max-width:1180px;
-  margin:0 auto;
-  padding:24px;
-}
-.portal-layout {
-  display:grid;
-  grid-template-columns:minmax(360px,.92fr) minmax(420px,1.08fr);
-  gap:12px;
-  align-items:start;
-  min-height:480px;
-}
-.portal-layout .card {
   min-width:0;
+  overflow:auto;
 }
-.portal-form-row {
-  display:grid;
-  grid-template-columns:1fr 1fr 1fr;
+.nav-tabs button,
+.header-actions button,
+.small-btn {
+  border:1px solid var(--line);
+  background:#fff;
+  color:#344054;
+  border-radius:999px;
+  padding:10px 15px;
+  font-size:13px;
+  font-weight:850;
+  cursor:pointer;
+}
+.nav-tabs button.active {
+  background:#101828;
+  border-color:#101828;
+  color:#fff;
+}
+.header-actions {
+  display:flex;
+  justify-content:flex-end;
   gap:8px;
 }
-.sample-strip {
-  display:flex;
+.header-actions button.primary {
+  background:var(--blue);
+  border-color:var(--blue);
+  color:#fff;
+}
+.toast {
+  position:fixed;
+  right:22px;
+  top:108px;
+  z-index:40;
+  max-width:360px;
+  padding:13px 15px;
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fff;
+  box-shadow:0 18px 45px rgba(16,24,40,.18);
+  color:#344054;
+  font-weight:800;
+  display:none;
+}
+.page-grid {
+  display:grid;
+  grid-template-columns:minmax(0,1.08fr) 390px;
+  gap:18px;
+  align-items:start;
+  margin-top:18px;
+}
+.main-stack {
+  display:grid;
+  gap:18px;
+}
+.hero {
+  min-height:310px;
+  display:grid;
+  grid-template-columns:minmax(0,1fr) 310px;
+  gap:18px;
+  padding:28px;
+  border:1px solid var(--line);
+  border-radius:26px;
+  background:
+    radial-gradient(circle at 88% 20%, rgba(132,202,255,.45), transparent 28%),
+    linear-gradient(135deg,#fff 0%,#f6faff 58%,#edf6ff 100%);
+  box-shadow:0 18px 45px rgba(16,24,40,.08);
+}
+.eyebrow {
+  display:inline-flex;
   align-items:center;
+  gap:8px;
+  padding:7px 11px;
+  border-radius:999px;
+  background:#eff8ff;
+  color:#175cd3;
+  font-size:12px;
+  font-weight:900;
+}
+.hero h1 {
+  margin-top:18px;
+  max-width:620px;
+  font-size:44px;
+  line-height:1.02;
+  letter-spacing:0;
+  color:var(--text);
+}
+.hero p {
+  margin-top:14px;
+  max-width:600px;
+  color:var(--muted);
+  font-size:16px;
+  line-height:1.65;
+}
+.hero-actions {
+  display:flex;
+  gap:10px;
+  flex-wrap:wrap;
+  margin-top:22px;
+}
+.action-primary,
+.action-secondary {
+  border:0;
+  border-radius:999px;
+  padding:12px 18px;
+  font-size:14px;
+  font-weight:900;
+  cursor:pointer;
+}
+.action-primary {
+  background:var(--blue);
+  color:#fff;
+}
+.action-secondary {
+  background:#fff;
+  color:#101828;
+  border:1px solid var(--line);
+}
+.balance-card {
+  align-self:stretch;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+  min-height:250px;
+  border-radius:24px;
+  padding:24px;
+  background:linear-gradient(145deg,#101828,#293548);
+  color:#fff;
+  overflow:hidden;
+  position:relative;
+}
+.balance-card::after {
+  content:"";
+  position:absolute;
+  right:-60px;
+  bottom:-70px;
+  width:190px;
+  height:190px;
+  border:34px solid rgba(255,255,255,.08);
+  border-radius:48px;
+  transform:rotate(24deg);
+}
+.balance-card span {
+  color:#cbd5e1;
+  font-weight:800;
+}
+.balance-card strong {
+  display:block;
+  margin-top:12px;
+  color:#fff;
+  font-size:38px;
+  letter-spacing:0;
+}
+.quick-actions {
+  display:grid;
+  grid-template-columns:repeat(3,1fr);
+  gap:8px;
+  position:relative;
+  z-index:1;
+}
+.quick-actions button {
+  border:0;
+  border-radius:16px;
+  padding:12px 8px;
+  background:rgba(255,255,255,.12);
+  color:#fff;
+  font-weight:900;
+  cursor:pointer;
+}
+.section {
+  border:1px solid var(--line);
+  border-radius:22px;
+  background:#fff;
+  box-shadow:0 14px 38px rgba(16,24,40,.06);
+  padding:22px;
+}
+.section-head {
+  display:flex;
+  align-items:flex-start;
+  justify-content:space-between;
+  gap:12px;
+  margin-bottom:16px;
+}
+.section-title {
+  font-size:20px;
+  font-weight:950;
+  color:var(--text);
+}
+.section-note {
+  margin-top:4px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.5;
+}
+.cards-grid {
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  gap:12px;
+}
+.product-card {
+  min-height:166px;
+  padding:18px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:#fbfcff;
+  display:flex;
+  flex-direction:column;
+  justify-content:space-between;
+}
+.product-card h3 {
+  font-size:16px;
+  color:var(--text);
+}
+.product-card p {
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.45;
+}
+.product-card button {
+  align-self:flex-start;
+  border:0;
+  border-radius:999px;
+  background:#101828;
+  color:#fff;
+  padding:9px 13px;
+  font-weight:900;
+  cursor:pointer;
+}
+.issue-banner {
+  display:none;
+  border:1px solid #fecaca;
+  border-radius:18px;
+  background:#fff5f5;
+  padding:16px;
+  margin-top:12px;
+}
+.issue-banner.show {
+  display:block;
+}
+.issue-banner strong {
+  color:#991b1b;
+}
+.issue-banner p {
+  margin-top:7px;
+  color:#7f1d1d;
+  line-height:1.5;
+}
+.issue-banner .issue-actions {
+  display:flex;
   gap:8px;
   flex-wrap:wrap;
   margin-top:12px;
-  padding-top:12px;
-  border-top:1px solid var(--border);
 }
-.sample-strip span {
-  color:var(--text3);
-  font-size:10px;
-  font-weight:700;
-  letter-spacing:.08em;
-  text-transform:uppercase;
+.support-panel {
+  position:sticky;
+  top:108px;
+  border:1px solid var(--line);
+  border-radius:24px;
+  background:#fff;
+  box-shadow:0 18px 45px rgba(16,24,40,.08);
+  overflow:hidden;
 }
-.sample-strip button {
-  padding:5px 10px;
-  font-size:11px;
+.support-top {
+  padding:20px;
+  background:linear-gradient(135deg,#eff8ff,#fff);
+  border-bottom:1px solid var(--line);
+}
+.support-top h2 {
+  font-size:22px;
+  color:var(--text);
+  letter-spacing:0;
+}
+.support-top p {
+  margin-top:7px;
+  color:var(--muted);
+  font-size:13px;
+  line-height:1.55;
+}
+.support-body {
+  padding:18px;
+}
+label {
+  color:#344054;
+  font-weight:900;
+}
+input,
+textarea,
+select {
+  border:1px solid #d0d5dd;
+  border-radius:14px;
+  background:#fff;
+}
+input:focus,
+textarea:focus,
+select:focus {
+  border-color:#175cd3;
+  box-shadow:0 0 0 4px rgba(23,92,211,.12);
+}
+.form-row {
+  display:grid;
+  grid-template-columns:1fr 1fr;
+  gap:10px;
+}
+.scenario-row {
+  display:grid;
+  grid-template-columns:1fr 1fr 1fr;
+  gap:8px;
+  margin:12px 0 16px;
+}
+.scenario-row button {
+  border:1px solid var(--line);
+  border-radius:14px;
+  background:#fbfcff;
+  color:#344054;
+  padding:9px;
+  font-size:12px;
+  font-weight:900;
+  cursor:pointer;
+}
+.submit-btn {
+  width:100%;
+  border:0;
+  border-radius:999px;
+  background:var(--blue);
+  color:#fff;
+  padding:13px 16px;
+  font-weight:950;
+  cursor:pointer;
+}
+.status-card {
+  margin-top:14px;
+  border:1px solid var(--line);
+  border-radius:18px;
+  background:#fbfcff;
+  padding:15px;
 }
 .status-chip {
   display:inline-flex;
   align-items:center;
   gap:6px;
-  padding:3px 8px;
-  border-radius:4px;
-  border:1px solid var(--border2);
-  background:var(--bg2);
-  color:var(--text2);
-  font-size:11px;
-  font-weight:700;
-}
-.status-chip.ok {
-  border-color:#86efac;
-  background:#dcfce7;
-  color:var(--ok);
+  padding:6px 10px;
+  border-radius:999px;
+  background:#eff8ff;
+  color:#175cd3;
+  font-size:12px;
+  font-weight:950;
 }
 .status-chip.warn {
-  border-color:#fde68a;
-  background:#fffbeb;
-  color:var(--warn);
+  background:#fff7ed;
+  color:#c2410c;
 }
 .request-id {
   font-family:var(--mono);
-  font-size:13px;
-  font-weight:800;
-  color:var(--accent);
+  font-weight:900;
+  color:#101828;
   overflow-wrap:anywhere;
 }
-.user-summary {
-  display:grid;
-  grid-template-columns:repeat(3,minmax(0,1fr));
-  gap:10px;
-  margin:14px 0;
-}
-.user-metric {
-  background:var(--bg2);
-  border:1px solid var(--border);
-  border-radius:6px;
-  padding:10px 12px;
-  min-width:0;
-}
-.user-metric .value {
-  color:var(--text);
-  font-size:13px;
-  font-weight:800;
-  line-height:1.35;
-  overflow-wrap:anywhere;
-}
-.next-steps {
-  background:var(--bg2);
-  border:1px solid var(--border);
-  border-radius:6px;
-  padding:12px 14px;
-  margin-top:12px;
-}
-.next-steps ol {
-  margin:0;
-  padding-left:18px;
-  color:var(--text2);
-  font-size:13px;
-  line-height:1.7;
-}
-.history-card {
-  padding:0;
-  overflow:hidden;
-}
-.history-top {
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:12px;
-  padding:12px 16px;
-  border-bottom:1.5px solid var(--border);
-  background:var(--bg1);
-}
-.history-body {
+.ticket-feed {
   overflow:auto;
 }
-.history-table td,
-.history-table th {
-  white-space:normal;
+.ticket-feed table {
+  width:100%;
+  border-collapse:collapse;
 }
-.history-table tbody tr.selected td {
-  background:#eff6ff;
+.ticket-feed th,
+.ticket-feed td {
+  padding:13px 10px;
+  border-top:1px solid var(--line);
+  text-align:left;
+  vertical-align:top;
 }
-.history-table tbody tr.selected td:first-child {
-  border-left:3px solid var(--accent);
+.ticket-feed th {
+  color:#667085;
+  font-size:12px;
+  text-transform:uppercase;
+  letter-spacing:.05em;
 }
-.history-table .id {
-  color:var(--accent);
+.ticket-feed td {
+  color:#344054;
+  font-weight:750;
 }
 .muted-note {
-  color:var(--text3);
-  font-size:11px;
-  line-height:1.55;
+  color:var(--muted);
+  font-size:12px;
+  line-height:1.5;
 }
-@media (max-width: 980px) {
-  .portal-layout { grid-template-columns:1fr; }
+.hidden-section {
+  display:none;
 }
-@media (max-width: 720px) {
-  .portal-bar { align-items:flex-start;flex-direction:column;height:auto;padding:14px 18px; }
-  .portal-main { padding:18px; }
-  .portal-form-row,
-  .user-summary { grid-template-columns:1fr; }
+@media (max-width: 1050px) {
+  .page-grid,
+  .hero { grid-template-columns:1fr; }
+  .support-panel { position:static; }
+}
+@media (max-width: 760px) {
+  .site-shell { padding:12px; }
+  .site-header,
+  .cards-grid,
+  .scenario-row,
+  .form-row { grid-template-columns:1fr; }
+  .nav-tabs { justify-content:flex-start; }
+  .hero { padding:20px; }
+  .hero h1 { font-size:32px; }
 }
 </style>
 </head>
 <body class="user-ticket-portal">
-<header class="portal-bar">
-  <div class="portal-brand">
-    <strong>IncidentOps Ticket Portal</strong>
-    <span>User request generator</span>
-  </div>
-  <div class="portal-health">Portal online</div>
-</header>
-
-<main class="portal-main">
-  <div class="page-header">
-    <h1>Raise Ticket // Request Workspace</h1>
-    <p>Create a support ticket, get a request ID, and track all tickets submitted from this browser.</p>
-  </div>
-  <div id="raise-error"></div>
-
-  <div class="portal-layout mb-1">
-    <section class="card">
-      <div class="card-title">Ticket Input</div>
-      <label for="r-short">Short Description *</label>
-      <input id="r-short" placeholder="One-line summary of the issue">
-
-      <label for="r-desc">Full Description</label>
-      <textarea id="r-desc" rows="4" placeholder="Describe what happened, where it happened, and any error message you saw."></textarea>
-
-      <div class="portal-form-row">
-        <div>
-          <label for="r-urg">Urgency</label>
-          <select id="r-urg">
-            <option value="1">P1 Critical</option>
-            <option value="2">P2 High</option>
-            <option value="3" selected>P3 Medium</option>
-          </select>
-        </div>
-        <div>
-          <label for="r-imp">Impact</label>
-          <select id="r-imp">
-            <option value="1">P1 Global</option>
-            <option value="2">P2 Service</option>
-            <option value="3" selected>P3 User</option>
-          </select>
-        </div>
-        <div>
-          <label for="r-channel">Contact</label>
-          <select id="r-channel">
-            <option selected>Portal</option>
-            <option>Email</option>
-            <option>Phone</option>
-          </select>
-        </div>
-      </div>
-
-      <div class="sample-strip">
-        <span>Demo presets</span>
-        <button class="btn btn-ghost" type="button" onclick="fillSample('cache')">Known fix</button>
-        <button class="btn btn-ghost" type="button" onclick="fillSample('rag')">Normal route</button>
-        <button class="btn btn-ghost" type="button" onclick="fillSample('ood')">Needs review</button>
-      </div>
-
-      <div style="margin-top:16px">
-        <button class="btn btn-primary" style="width:100%" onclick="submitTicket()" id="route-btn">Submit Ticket</button>
-      </div>
-    </section>
-
-    <section class="card" id="result-card">
-      <div class="card-title">
-        <span>Request Status</span>
-        <span class="sub" id="last-run-time"></span>
-      </div>
-      <div id="status-note" class="muted-note" style="display:none;margin-bottom:10px"></div>
-      <div id="result-content" class="empty-state" style="padding:40px 16px">Submit a ticket to see your request status.</div>
-    </section>
-  </div>
-
-  <section class="card history-card">
-    <div class="history-top">
+<div class="site-shell">
+  <header class="site-header">
+    <div class="brand">
+      <div class="brand-mark">F</div>
       <div>
-        <div class="card-title" style="margin:0">My Tickets</div>
-        <div class="muted-note" style="margin-top:3px">Tickets submitted from this browser appear here automatically.</div>
+        <strong>Finora</strong>
+        <span>Customer banking portal</span>
       </div>
-      <button class="btn btn-ghost" type="button" onclick="clearRequestHistory()">Clear History</button>
     </div>
-    <div class="history-body" id="history-body">
-      <div class="empty-state" style="padding:34px 16px">No submitted tickets yet.</div>
+    <nav class="nav-tabs" aria-label="Portal sections">
+      <button class="active" type="button" onclick="showSection('overview', this)">Overview</button>
+      <button type="button" onclick="showSection('payments', this)">Payments</button>
+      <button type="button" onclick="showSection('documents', this)">Documents</button>
+      <button type="button" onclick="showSection('profile', this)">Profile</button>
+      <button type="button" onclick="focusSupport(this)">Help</button>
+    </nav>
+    <div class="header-actions">
+      <button type="button" onclick="siteAction('Search is ready. Try searching for invoices, payments, or documents.')">Search</button>
+      <button type="button" onclick="siteAction('You have 2 account alerts. One payment service alert needs attention.')">Alerts</button>
+      <button class="primary" type="button" onclick="focusSupport()">Raise Ticket</button>
     </div>
-  </section>
-</main>
+  </header>
 
-<script src="shared.js?v=20260514-raise2"></script>
+  <div class="toast" id="toast"></div>
+
+  <div class="page-grid">
+    <div class="main-stack">
+      <section class="hero" id="overview-section">
+        <div>
+          <span class="eyebrow">Personal account</span>
+          <h1>Manage money, documents, and account settings in one place.</h1>
+          <p>This is a normal customer website. Some actions intentionally fail like real production issues, so the user can report the problem and IncidentOps can route the ticket.</p>
+          <div class="hero-actions">
+            <button class="action-primary" type="button" onclick="simulateIssue('payment')">Transfer Funds</button>
+            <button class="action-secondary" type="button" onclick="siteAction('Statement downloaded successfully.')">Download Statement</button>
+            <button class="action-secondary" type="button" onclick="simulateIssue('login')">Refresh Session</button>
+          </div>
+          <div class="issue-banner" id="active-issue">
+            <strong id="issue-title">Payment failed</strong>
+            <p id="issue-copy">A service error occurred.</p>
+            <div class="issue-actions">
+              <button class="small-btn" type="button" onclick="focusSupport()">Report this issue</button>
+              <button class="small-btn" type="button" onclick="dismissIssue()">Dismiss</button>
+            </div>
+          </div>
+        </div>
+        <div class="balance-card">
+          <div>
+            <span>Available balance</span>
+            <strong>$70,147.41</strong>
+          </div>
+          <div class="quick-actions">
+            <button type="button" onclick="siteAction('Deposit flow opened successfully.')">Deposit</button>
+            <button type="button" onclick="siteAction('Withdraw request is ready for review.')">Withdraw</button>
+            <button type="button" onclick="simulateIssue('payment')">Transfer</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="section" id="payments-section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Payments</div>
+            <div class="section-note">Run normal actions and trigger a serious payment issue.</div>
+          </div>
+          <button class="small-btn" type="button" onclick="siteAction('Payment methods loaded successfully.')">Manage cards</button>
+        </div>
+        <div class="cards-grid">
+          <article class="product-card">
+            <h3>Transfer funds</h3>
+            <p>Send money to a saved recipient. This demo triggers a critical gateway timeout.</p>
+            <button type="button" onclick="simulateIssue('payment')">Transfer now</button>
+          </article>
+          <article class="product-card">
+            <h3>Pay invoice</h3>
+            <p>Pay a vendor invoice from the account balance.</p>
+            <button type="button" onclick="siteAction('Invoice payment scheduled successfully.')">Pay invoice</button>
+          </article>
+          <article class="product-card">
+            <h3>Rate limit test</h3>
+            <p>Simulate a high-severity API limit issue during repeated requests.</p>
+            <button type="button" onclick="simulateIssue('rate')">Run test</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="section hidden-section" id="documents-section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Documents</div>
+            <div class="section-note">Upload and manage account verification files.</div>
+          </div>
+          <button class="small-btn" type="button" onclick="siteAction('Document list refreshed.')">Refresh</button>
+        </div>
+        <div class="cards-grid">
+          <article class="product-card">
+            <h3>Upload verification</h3>
+            <p>Upload a PDF for onboarding. This demo triggers a medium service issue.</p>
+            <button type="button" onclick="simulateIssue('upload')">Upload file</button>
+          </article>
+          <article class="product-card">
+            <h3>Download tax form</h3>
+            <p>Download the latest tax document.</p>
+            <button type="button" onclick="siteAction('Tax form downloaded successfully.')">Download</button>
+          </article>
+          <article class="product-card">
+            <h3>Approval workflow</h3>
+            <p>Check a pending approval that can get stuck.</p>
+            <button type="button" onclick="simulateIssue('workflow')">Check approval</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="section hidden-section" id="profile-section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Profile</div>
+            <div class="section-note">Update account details and personal preferences.</div>
+          </div>
+          <button class="small-btn" type="button" onclick="siteAction('Security settings opened.')">Security</button>
+        </div>
+        <div class="cards-grid">
+          <article class="product-card">
+            <h3>Profile image</h3>
+            <p>Change the display photo. This demo triggers a small persistence issue.</p>
+            <button type="button" onclick="simulateIssue('profile')">Save image</button>
+          </article>
+          <article class="product-card">
+            <h3>Notifications</h3>
+            <p>Adjust delivery settings for account alerts.</p>
+            <button type="button" onclick="simulateIssue('notification')">Save settings</button>
+          </article>
+          <article class="product-card">
+            <h3>Address</h3>
+            <p>Update billing address information.</p>
+            <button type="button" onclick="siteAction('Address saved successfully.')">Save address</button>
+          </article>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <div class="section-title">Recent Activity</div>
+            <div class="section-note">A normal customer activity feed, plus issues raised from this browser.</div>
+          </div>
+          <button class="small-btn" type="button" onclick="clearRequestHistory()">Clear Tickets</button>
+        </div>
+        <div class="ticket-feed" id="history-body"></div>
+      </section>
+    </div>
+
+    <aside class="support-panel" id="support-panel">
+      <div class="support-top">
+        <h2>Raise a support ticket</h2>
+        <p>When something breaks on this customer site, submit the issue here. IncidentOps receives the ticket, classifies it, and returns the next action.</p>
+      </div>
+      <div class="support-body">
+        <div id="raise-error"></div>
+
+        <label for="r-short">Issue summary *</label>
+        <input id="r-short" placeholder="Payment failed with 503 Gateway Timeout">
+
+        <label for="r-desc">What happened?</label>
+        <textarea id="r-desc" rows="4" placeholder="Describe the page, button, error message, and who is affected."></textarea>
+
+        <div class="form-row">
+          <div>
+            <label for="r-urg">Urgency</label>
+            <select id="r-urg">
+              <option value="1">P1 Critical</option>
+              <option value="2">P2 High</option>
+              <option value="3" selected>P3 Medium</option>
+            </select>
+          </div>
+          <div>
+            <label for="r-imp">Impact</label>
+            <select id="r-imp">
+              <option value="1">Many users</option>
+              <option value="2">Some users</option>
+              <option value="3" selected>Only me</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="scenario-row">
+          <button type="button" onclick="simulateIssue('payment')">Serious</button>
+          <button type="button" onclick="simulateIssue('upload')">Medium</button>
+          <button type="button" onclick="simulateIssue('profile')">Small</button>
+        </div>
+
+        <button class="submit-btn" type="button" onclick="submitTicket()" id="route-btn">Submit ticket</button>
+
+        <div class="status-card" id="result-card">
+          <div id="status-note" class="muted-note">No ticket submitted yet.</div>
+          <div id="result-content" style="margin-top:12px"></div>
+          <div id="last-run-time" class="muted-note" style="margin-top:10px"></div>
+        </div>
+      </div>
+    </aside>
+  </div>
+</div>
+
+<script src="shared.js?v=20260613-userdemo1"></script>
 <script>
 const REQUEST_HISTORY_KEY = 'incidentops_support_request_history';
 let lastRaisedTicketId = '';
+let activeIssueKey = '';
 
-const SAMPLES = {
-  cache: {
-    short_description: 'Merchant unable to e-sign Agreement due to session timeout',
-    description: 'Some merchants receive authentication errors when attempting to log in to the Customer UI to review and e-sign the Merchant Agreement, preventing access to the document.',
-    urgency: '3',
-    impact: '3',
+const ISSUES = {
+  payment: {
+    title: 'Payment Gateway Timeout',
+    copy: 'Transfer Funds failed with 503 Gateway Timeout. The payment authorization service did not respond.',
+    short_description: 'Payment Gateway Timeout during money transfer',
+    description: 'A customer clicked Transfer Funds in the banking portal and received Payment Failed: 503 Gateway Timeout. The payment authorization flow is blocked and the Payments API appears unavailable.',
+    urgency: '1',
+    impact: '1',
+    severity: 'Critical',
+    service: 'Payments API',
   },
-  rag: {
-    short_description: 'Manual case 3: PDF not loading for Merchant Agreement review for new merchant record',
-    description: 'During the data upload process for a new merchant, the API endpoint consistently returns a 500 error, preventing sales agents from successfully onboarding the merchant. The issue was reproduced by support for merchant MRC-7103 after a browser refresh and retry. This is a new manually created evaluation ticket, not a reopened incident.',
-    urgency: '3',
-    impact: '3',
+  login: {
+    title: 'Authentication Service Unavailable',
+    copy: 'Refreshing the session failed because the authentication service is unavailable.',
+    short_description: 'Authentication Service Unavailable during session refresh',
+    description: 'A customer refreshed their session and saw Authentication Service Unavailable. New sessions cannot be created for a subset of users.',
+    urgency: '2',
+    impact: '2',
+    severity: 'High',
+    service: 'Auth API',
   },
-  ood: {
-    short_description: 'Need cafeteria menu updated for a team lunch',
-    description: 'I need help changing lunch menu options for a team event next week. This is not related to the customer portal or merchant agreement.',
+  rate: {
+    title: 'API Rate Limit Exceeded',
+    copy: 'Repeated account requests are blocked by rate limiting.',
+    short_description: 'API Rate Limit Exceeded in payments page',
+    description: 'The payments page returns API Rate Limit Exceeded after repeated customer actions. Users cannot complete the account operation until the limit clears.',
+    urgency: '2',
+    impact: '2',
+    severity: 'High',
+    service: 'Gateway API',
+  },
+  upload: {
+    title: 'Document Upload Failed',
+    copy: 'The verification document reaches 100 percent and then fails to save.',
+    short_description: 'Document Upload Failed in verification portal',
+    description: 'A customer uploaded a required verification document. The upload reached 100 percent and returned Upload Failed, blocking onboarding completion.',
+    urgency: '3',
+    impact: '2',
+    severity: 'Medium',
+    service: 'Storage Service',
+  },
+  workflow: {
+    title: 'Approval Workflow Stuck',
+    copy: 'The approval check keeps loading and never returns a final state.',
+    short_description: 'Approval Workflow Stuck for account verification',
+    description: 'A customer opened an approval status check and the workflow stayed in pending state without completing. The account verification cannot move forward.',
+    urgency: '3',
+    impact: '2',
+    severity: 'Medium',
+    service: 'Workflow Engine',
+  },
+  profile: {
+    title: 'Profile Image Update Failed',
+    copy: 'The profile image appears saved, but the old image returns after refresh.',
+    short_description: 'Profile image update failed',
+    description: 'A customer updated their profile image. The save appeared successful, but after refresh the old image returned. Core account access still works.',
     urgency: '3',
     impact: '3',
+    severity: 'Low',
+    service: 'Profile Service',
+  },
+  notification: {
+    title: 'Notification Delay',
+    copy: 'Notification settings save, but account alerts are delayed.',
+    short_description: 'Notification delay after settings update',
+    description: 'A customer changed notification preferences. Settings saved, but expected account alerts are delayed by several minutes.',
+    urgency: '3',
+    impact: '3',
+    severity: 'Low',
+    service: 'Notification Engine',
   },
 };
+
+const ACTIVITY_SEED = [
+  { id:'ACT-1007', title:'Statement downloaded', severity:'Info', service:'Documents', status_label:'Successful', confidence:'-' },
+  { id:'ACT-1008', title:'Invoice payment scheduled', severity:'Info', service:'Payments', status_label:'Successful', confidence:'-' },
+  { id:'ACT-1009', title:'Card settings reviewed', severity:'Info', service:'Cards', status_label:'Successful', confidence:'-' },
+];
+
+function siteAction(message) {
+  const toast = document.getElementById('toast');
+  toast.textContent = message;
+  toast.style.display = 'block';
+  window.clearTimeout(siteAction.timer);
+  siteAction.timer = window.setTimeout(() => { toast.style.display = 'none'; }, 2800);
+}
+
+function showSection(name, button) {
+  ['payments', 'documents', 'profile'].forEach(id => {
+    document.getElementById(`${id}-section`).classList.toggle('hidden-section', id !== name && name !== 'overview');
+  });
+  document.querySelectorAll('.nav-tabs button').forEach(btn => btn.classList.remove('active'));
+  if (button) button.classList.add('active');
+  if (name === 'overview') window.scrollTo({ top:0, behavior:'smooth' });
+  else document.getElementById(`${name}-section`)?.scrollIntoView({ behavior:'smooth', block:'start' });
+}
+
+function focusSupport() {
+  document.getElementById('support-panel').scrollIntoView({ behavior:'smooth', block:'start' });
+  document.getElementById('r-short').focus({ preventScroll:true });
+}
+
+function simulateIssue(key) {
+  const issue = ISSUES[key];
+  if (!issue) return;
+  activeIssueKey = key;
+  document.getElementById('issue-title').textContent = issue.title;
+  document.getElementById('issue-copy').textContent = issue.copy;
+  document.getElementById('active-issue').classList.add('show');
+  document.getElementById('r-short').value = issue.short_description;
+  document.getElementById('r-desc').value = issue.description;
+  document.getElementById('r-urg').value = issue.urgency;
+  document.getElementById('r-imp').value = issue.impact;
+  siteAction(`${issue.title}: issue details added to the support form.`);
+}
+
+function dismissIssue() {
+  document.getElementById('active-issue').classList.remove('show');
+}
 
 function setNote(message, tone = '') {
   const el = document.getElementById('status-note');
   el.textContent = message;
-  el.style.display = message ? 'block' : 'none';
-  el.style.color = tone === 'fail' ? 'var(--critical)' : tone === 'ok' ? 'var(--ok)' : 'var(--text3)';
+  el.style.color = tone === 'fail' ? 'var(--red)' : tone === 'ok' ? 'var(--green)' : 'var(--muted)';
 }
 
 function setBusy(isBusy) {
   const btn = document.getElementById('route-btn');
   btn.disabled = isBusy;
-  btn.textContent = isBusy ? 'Submitting...' : 'Submit Ticket';
-}
-
-function fillSample(name) {
-  const sample = SAMPLES[name];
-  if (!sample) return;
-  document.getElementById('r-short').value = sample.short_description;
-  document.getElementById('r-desc').value = sample.description;
-  document.getElementById('r-urg').value = sample.urgency;
-  document.getElementById('r-imp').value = sample.impact;
-}
-
-function userResolutionItems(items) {
-  const cleaned = [];
-  plainResolutionItems(items).forEach(item => {
-    const lower = item.toLowerCase();
-    if (lower.startsWith('classify as ') || lower.includes('compare with similar incident')) return;
-    if (lower.includes('resolution reused from')) return;
-    if (lower.includes('validate the fix') || lower.includes('monitor for recurrence')) {
-      cleaned.push('After trying the steps, confirm whether the issue is fixed. If it continues, contact support with your request ID.');
-      return;
-    }
-    cleaned.push(item
-      .replace(/^Resolved by /i, 'Try ')
-      .replace(/Customer UI/g, 'customer portal')
-      .replace(/affected user/g, 'you')
-      .replace(/incident/gi, 'request'));
-  });
-  return Array.from(new Set(cleaned));
-}
-
-function supportState(t) {
-  const needsReview = t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution';
-  if (needsReview) {
-    return {
-      label: 'Support review',
-      className: 'warn',
-      tone: 'var(--warn)',
-      next: 'A specialist will review this ticket.',
-    };
-  }
-  return {
-    label: 'Fix available',
-    className: 'ok',
-    tone: 'var(--ok)',
-    next: 'Try the recommended steps below.',
-  };
-}
-
-function renderSkeleton() {
-  document.getElementById('result-content').innerHTML = `
-    <div style="padding:16px">
-      <div class="skel-line" style="width:48%;margin-bottom:14px"></div>
-      <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-bottom:16px">
-        <div class="skel-line" style="height:58px"></div>
-        <div class="skel-line" style="height:58px"></div>
-        <div class="skel-line" style="height:58px"></div>
-      </div>
-      <div class="skel-line" style="width:35%;margin-bottom:10px"></div>
-      <div class="skel-line" style="width:100%;margin-bottom:6px"></div>
-      <div class="skel-line" style="width:82%;margin-bottom:6px"></div>
-      <div class="skel-line" style="width:64%"></div>
-    </div>`;
+  btn.textContent = isBusy ? 'Submitting...' : 'Submit ticket';
 }
 
 function getRequestHistory() {
@@ -409,50 +842,65 @@ function saveRequestHistory(items) {
   localStorage.setItem(REQUEST_HISTORY_KEY, JSON.stringify(items.slice(0, 12)));
 }
 
+function currentIssueFromTicket(t) {
+  const text = `${t.short_description || ''} ${t.description || ''}`.toLowerCase();
+  return Object.values(ISSUES).find(issue => text.includes(issue.title.toLowerCase().split(' ')[0]) || text.includes(issue.service.toLowerCase().split(' ')[0]));
+}
+
+function supportState(t) {
+  const needsReview = t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution';
+  if (needsReview) return { label:'Support reviewing', className:'warn', next:'A support specialist will review and follow up.' };
+  return { label:'IncidentOps accepted', className:'', next:'The ticket was routed and IncidentOps returned the next action.' };
+}
+
+function confidenceValue(t) {
+  const raw = Number(t.confidence_score ?? t.confidence ?? 0);
+  if (!Number.isFinite(raw) || raw <= 0) return 'Pending';
+  return `${Math.round(raw <= 1 ? raw * 100 : raw)}%`;
+}
+
 function upsertRequestHistory(t) {
   if (!t?.ticket_id) return;
   const state = supportState(t);
+  const issue = currentIssueFromTicket(t) || ISSUES[activeIssueKey] || {};
   const current = getRequestHistory();
-  const existing = current.find(item => item.id === t.ticket_id) || {};
   const next = {
-    ...existing,
     id: t.ticket_id,
-    title: t.short_description || existing.title || 'Support ticket',
-    issue_area: t.assigned_category || t.category || existing.issue_area || 'Review needed',
-    owner: t.assignment_group || t.owner_group || existing.owner || 'Support',
+    title: t.short_description || 'Customer issue',
+    severity: issue.severity || 'Medium',
+    service: t.assigned_category || issue.service || 'Support',
     status_label: state.label,
     status_class: state.className,
+    confidence: confidenceValue(t),
     updated_at: new Date().toISOString(),
   };
   saveRequestHistory([next, ...current.filter(item => item.id !== t.ticket_id)]);
 }
 
 function renderHistory(activeId = lastRaisedTicketId) {
-  const rows = getRequestHistory();
+  const rows = [...getRequestHistory(), ...ACTIVITY_SEED];
   const body = document.getElementById('history-body');
-  if (!rows.length) {
-    body.innerHTML = '<div class="empty-state" style="padding:34px 16px">No submitted tickets yet.</div>';
-    return rows;
-  }
   body.innerHTML = `
-    <table class="ticket-table history-table">
+    <table>
       <thead>
         <tr>
-          <th>Ticket ID</th>
-          <th>Description</th>
+          <th>ID</th>
+          <th>Activity</th>
+          <th>Severity</th>
+          <th>Service</th>
           <th>Status</th>
-          <th>Area</th>
-          <th>Updated</th>
+          <th>AI Confidence</th>
         </tr>
       </thead>
       <tbody>
         ${rows.map(item => `
-          <tr class="${item.id === activeId ? 'selected' : ''}" onclick="loadTicketDetail('${html(item.id)}')">
-            <td class="id">${html(item.id)}</td>
+          <tr ${item.id.startsWith('ACT-') ? '' : `onclick="loadTicketDetail('${html(item.id)}')" style="cursor:pointer"`}>
+            <td class="request-id">${html(item.id)}</td>
             <td>${html(item.title)}</td>
+            <td>${html(item.severity || 'Medium')}</td>
+            <td>${html(item.service || 'Support')}</td>
             <td><span class="status-chip ${html(item.status_class || '')}">${html(item.status_label || 'Submitted')}</span></td>
-            <td>${html(item.issue_area || 'Review needed')}</td>
-            <td>${html(item.updated_at ? new Date(item.updated_at).toLocaleString() : 'Recently')}</td>
+            <td>${html(item.confidence || 'Pending')}</td>
           </tr>
         `).join('')}
       </tbody>
@@ -464,17 +912,23 @@ function clearRequestHistory() {
   localStorage.removeItem(REQUEST_HISTORY_KEY);
   lastRaisedTicketId = '';
   renderHistory('');
-  document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Submit a ticket to see your request status.</div>';
+  document.getElementById('result-content').innerHTML = '';
   setNote('Ticket history cleared for this browser.', 'ok');
 }
 
+function renderSkeleton() {
+  document.getElementById('result-content').innerHTML = `
+    <div class="skel-line" style="width:70%;margin-bottom:10px"></div>
+    <div class="skel-line" style="width:100%;margin-bottom:8px"></div>
+    <div class="skel-line" style="width:82%"></div>`;
+}
+
 function resolutionList(t) {
-  if (t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution') {
-    return '<ol><li>This ticket has been sent to the support team for review.</li><li>A specialist will review the details and follow up with the next action.</li></ol>';
-  }
-  const list = userResolutionItems(t.suggested_resolution_items);
-  if (list.length) return `<ol>${list.map(item => `<li>${html(item)}</li>`).join('')}</ol>`;
-  return '<div class="muted-note">No self-service steps are available yet.</div>';
+  const needsReview = t.escalation_required || t.status === 'human_review_required' || t.route_path === 'out_of_distribution';
+  if (needsReview) return '<ol><li>Your ticket is queued for a human support review.</li><li>IncidentOps has preserved the issue summary and impact for triage.</li></ol>';
+  const items = plainResolutionItems(t.suggested_resolution_items || []);
+  if (!items.length) return '<p class="muted-note">IncidentOps accepted the ticket. The support team can now work from the routed incident.</p>';
+  return `<ol>${items.slice(0,3).map(item => `<li>${html(item)}</li>`).join('')}</ol>`;
 }
 
 function renderUserResult(raw) {
@@ -483,47 +937,24 @@ function renderUserResult(raw) {
   lastRaisedTicketId = t.ticket_id;
   document.getElementById('last-run-time').textContent = `Updated ${new Date().toLocaleTimeString()}`;
   document.getElementById('result-content').innerHTML = `
-    <div class="result-revealed">
-      <div style="display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:12px">
+    <div>
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap">
         <div>
-          <div class="kpi-label">Ticket ID</div>
+          <div class="muted-note">Ticket ID</div>
           <div class="request-id">${html(t.ticket_id)}</div>
         </div>
         <span class="status-chip ${state.className}">${state.label}</span>
       </div>
-
-      <div class="user-summary">
-        <div class="user-metric">
-          <div class="kpi-label">Issue Area</div>
-          <div class="value">${html(t.assigned_category || t.category || 'Review needed')}</div>
-        </div>
-        <div class="user-metric">
-          <div class="kpi-label">Assigned Team</div>
-          <div class="value">${html(t.assignment_group || t.owner_group || 'Support')}</div>
-        </div>
-        <div class="user-metric">
-          <div class="kpi-label">Next Step</div>
-          <div class="value" style="color:${state.tone}">${html(state.next)}</div>
-        </div>
-      </div>
-
-      <div class="next-steps">
-        <div class="kpi-label">Recommended Next Steps</div>
-        ${resolutionList(t)}
-      </div>
-
-      ${t.matched_ticket_id && !t.escalation_required ? `
-        <div class="muted-note" style="margin-top:10px">
-          Similar resolved ticket used as reference: <span class="request-id">${html(t.matched_ticket_id)}</span>
-        </div>` : ''}
+      <div style="margin-top:12px" class="muted-note">${html(state.next)}</div>
+      <div style="margin-top:12px">${resolutionList(t)}</div>
     </div>`;
 }
 
 async function submitTicket() {
   const short = document.getElementById('r-short').value.trim();
-  if (!short) { alert('Short description is required'); return; }
+  if (!short) { alert('Issue summary is required'); return; }
   clearContainer('raise-error');
-  setNote('Submitting ticket...', '');
+  setNote('Submitting ticket to IncidentOps...', '');
   setBusy(true);
   renderSkeleton();
   const payload = {
@@ -531,7 +962,7 @@ async function submitTicket() {
     description: document.getElementById('r-desc').value.trim() || short,
     urgency: Number(document.getElementById('r-urg').value),
     impact: Number(document.getElementById('r-imp').value),
-    source: 'demo_portal',
+    source: 'customer_demo_site',
   };
   try {
     const result = await apiFetch('/v1/tickets/route', { method:'POST', body: JSON.stringify(payload) });
@@ -539,11 +970,12 @@ async function submitTicket() {
     renderUserResult(t);
     upsertRequestHistory(t);
     renderHistory(t.ticket_id);
-    setNote('Ticket submitted and added to My Tickets.', 'ok');
+    setNote('Ticket submitted. IncidentOps will route and solve it from the console.', 'ok');
+    siteAction('Ticket submitted to IncidentOps.');
     await loadTicketDetail(t.ticket_id);
   } catch(e) {
     showError('raise-error', e.message, e.status);
-    document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Ticket submission failed.</div>';
+    document.getElementById('result-content').innerHTML = '<p class="muted-note" style="color:var(--red)">Ticket submission failed.</p>';
     setNote('Ticket submission failed.', 'fail');
   } finally {
     setBusy(false);
@@ -553,7 +985,6 @@ async function submitTicket() {
 async function loadTicketDetail(id) {
   const ticketId = id || lastRaisedTicketId;
   if (!ticketId) return;
-  document.getElementById('result-content').innerHTML = '<div class="empty-state" style="padding:40px 16px">Loading ticket status...</div>';
   try {
     const raw = await apiFetch(`/v1/tickets/detail/${encodeURIComponent(ticketId)}`);
     const t = normalizeTicketPayload(raw);
@@ -561,15 +992,14 @@ async function loadTicketDetail(id) {
     upsertRequestHistory(t);
     renderHistory(t.ticket_id);
   } catch(e) {
-    document.getElementById('result-content').innerHTML = `<div class="empty-state" style="padding:40px 16px;color:var(--critical)">Ticket could not be loaded.</div>`;
+    document.getElementById('result-content').innerHTML = '<p class="muted-note" style="color:var(--red)">Ticket could not be loaded.</p>';
   }
 }
 
 function initPortal() {
   API_BASE = getApiBase();
   applySettings();
-  const history = renderHistory();
-  if (history.length) loadTicketDetail(history[0].id);
+  renderHistory();
 }
 
 initPortal();

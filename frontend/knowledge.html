@@ -3,47 +3,48 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // RAG CORPUS</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Knowledge Base</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
-.kb-layout { display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:1px;background:var(--border);min-height:calc(100vh - 260px); }
+.kb-layout { display:grid;grid-template-columns:minmax(0,1fr) 360px;gap:12px;background:transparent;min-height:calc(100vh - 260px); }
 .kb-table-head,
 .doc-row { display:grid;grid-template-columns:minmax(150px,.95fr) minmax(250px,2fr) minmax(120px,.75fr) minmax(150px,.9fr) minmax(90px,.55fr) minmax(76px,.45fr);gap:12px;min-width:860px; }
 .doc-row { align-items:center;padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s; }
 .doc-row > span { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap; }
-.doc-row:hover,.doc-row.selected { background:var(--bg2); }
-.doc-row.selected { border-left:3px solid var(--accent); }
+.doc-row:hover,.doc-row.selected { background:#eef6ff; }
+.doc-row.selected { border-left:0;box-shadow:inset 3px 0 0 var(--accent); }
 .approved-badge { font-family:var(--mono);font-size:8px;color:var(--ok);border:1px solid var(--ok);padding:1px 5px;border-radius:2px;white-space:nowrap; }
 .not-approved { font-family:var(--mono);font-size:8px;color:var(--text3);border:1px solid var(--border2);padding:1px 5px;border-radius:2px;white-space:nowrap; }
+@media (max-width:1180px) { .kb-layout { grid-template-columns:1fr;min-height:0; } }
 </style>
 
 </head>
 <body>
 <div id="topbar">
   <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
-  <div class="center"><div class="page-title">Knowledge Base // Retrieval Corpus</div></div>
+  <div class="center"><div class="page-title">Knowledge Base</div></div>
   <div class="right">
     <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
     <div id="utc-clock"></div>
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item active" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
 </nav>
 <main id="main">
   <div class="page-header">
-    <h1>Knowledge Base // Retrieval Corpus</h1>
-    <p>Sanitized historical tickets used for retrieval · <span style="font-family:var(--mono);color:var(--accent)">GET /v1/knowledge</span></p>
+    <h1>Knowledge Base</h1>
+    <p>Sanitized historical tickets used for retrieval and resolution suggestions.</p>
   </div>
   <div id="kb-error"></div>
 
@@ -75,7 +76,7 @@
     </div>
   </div>
 </main>
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 let allDocs = [];
 

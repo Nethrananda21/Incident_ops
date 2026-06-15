@@ -28,8 +28,11 @@ class TicketRequest(ApiModel):
 class ConfidenceComponents(ApiModel):
     classification: float
     retrieval_similarity: float
+    rag_evidence_quality: float = 0.0
+    historical_similarity: float = 0.0
     verifier_score: float
     privacy_risk: float
+    risk_modifier: float = 1.0
 
 
 class RouteEvidence(ApiModel):

@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse, PlainTextResponse, StreamingResponse
 
-from app.agent import RoutingAgent
+from app.agent import RoutingAgent, sanitized_ticket_fields
 from app.clickhouse_repo import ClickHouseRepository
 from app.config import get_settings
 from app.llm import NvidiaLLM
@@ -1009,6 +1009,11 @@ def ticket_detail(ticket_id: str) -> dict:
     if not ticket_result.result_rows:
         raise HTTPException(status_code=404, detail="ticket not found")
     ticket = ticket_result.result_rows[0]
+    display_short_description, display_description = sanitized_ticket_fields(
+        str(ticket[2] or ""),
+        str(ticket[3] or ""),
+        str(ticket[4] or ""),
+    )
 
     decision_result = repo.client.query(
         """
@@ -1156,8 +1161,8 @@ def ticket_detail(ticket_id: str) -> dict:
         "ticket": {
             "ticket_id": ticket[0],
             "number": ticket[1],
-            "short_description": ticket[2],
-            "description": ticket[3],
+            "short_description": display_short_description,
+            "description": display_description,
             "sanitized_text": ticket[4],
             "category": ticket[5],
             "assignment_group": ticket[6],

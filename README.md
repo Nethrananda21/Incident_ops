@@ -74,7 +74,7 @@ The frontend is available at:
 
 Pages:
 
-- **Dashboard**: LLM-backed ticket totals, routing decisions, privacy findings, route distribution, backend readiness, and recent tickets.
+- **Dashboard**: operations-first command view with top KPIs, tickets needing attention, category load, AI impact, knowledge coverage, latest explainable AI decision, human-review quality, privacy protection, and recent tickets.
 - **Intelligence**: routing quality, SLA risk queue, knowledge-gap clusters, resolver capacity, human feedback loop, and governance controls.
 - **Ticket Stream**: server-sent event feed of live backend tickets from ClickHouse.
 - **Search**: full ticket search with category, source, status, route, urgency, and impact filters; rows open full ticket details.
@@ -179,13 +179,13 @@ The **Intelligence** page surfaces these signals live from the backend with no h
 The final confidence score is composite:
 
 ```text
-0.20 * classification confidence
-+ 0.20 * retrieval similarity
-+ 0.50 * LLM decision confidence
-+ 0.10 * privacy safety score
+0.35 * classification confidence
++ 0.35 * RAG evidence quality
++ 0.20 * historical similarity
++ 0.10 * risk modifier
 ```
 
-Escalation occurs when the LLM decision marks human review as required. Composite confidence, RAG evidence quality, privacy risk, and policy signals remain visible in the route explanation and SLA risk score, but they do not bypass the LLM decision except for the `>= 0.95` semantic-cache fast path.
+Escalation occurs when the LLM decision marks human review as required. Privacy and security signals lower confidence through the risk modifier and remain visible in the route explanation and SLA risk score, but they are not treated as positive routing evidence and do not bypass the LLM decision except for the `>= 0.95` semantic-cache fast path.
 
 ## Privacy Design
 
@@ -253,7 +253,7 @@ Important routes:
 | Method | Route | Purpose |
 | --- | --- | --- |
 | `GET` | `/v1/health` | Service, ClickHouse, and model configuration health |
-| `GET` | `/v1/dashboard` | Live dashboard metrics |
+| `GET` | `/v1/dashboard` | Live dashboard KPIs, category load, privacy summaries, and routing counters |
 | `GET` | `/v1/tickets/recent` | Recent backend tickets |
 | `GET` | `/v1/tickets/stream` | SSE ticket stream |
 | `GET` | `/v1/tickets/search` | Search tickets with advanced filters |
@@ -510,15 +510,15 @@ The evaluator posts each ticket to `/v1/tickets/route` and compares the backend 
 ## Demo Flow
 
 1. Open [http://localhost:8081](http://localhost:8081).
-2. Start on **Dashboard**. With a clean database, every reading should be zero and the recent-ticket table should be empty.
+2. Start on **Dashboard**. With a clean database, every reading should be zero and the attention/recent-ticket tables should be empty.
 3. Submit a ticket from **Routing Desk** or call `POST /v1/tickets/route`.
-4. Explain the agent nodes: privacy, retrieval, RAG evidence scoring, assessment, triage, LLM resolution decision, and escalation.
+4. Return to **Dashboard** and point out the operational story: the attention queue, AI impact overview, knowledge coverage, latest explainable AI decision, human-review rate, and privacy protection summary.
 5. Open **Ticket Stream** to show the new backend ticket.
 6. Open **Search** and click the ticket to inspect the full detail page.
 7. Open **Privacy Audit** to show redaction evidence when the ticket contains sensitive values.
-8. Open **Knowledge Base** to show sanitized routed tickets used as retrieval corpus.
+8. Open **Knowledge Base** to show sanitized routed tickets used as retrieval corpus and where knowledge gaps can be closed.
 9. Open **Human Review** only when a backend route returns `human_review_required`.
-10. Open **Intelligence** to show SLA risk, route-quality trends, resolver saturation, knowledge gaps, and feedback-loop governance after enough tickets are routed.
+10. Open **Intelligence** to inspect the deeper engineering signals: route quality, SLA risk, resolver saturation, knowledge-gap clusters, feedback-loop governance, and model-quality details.
 
 ## Current Limitations
 

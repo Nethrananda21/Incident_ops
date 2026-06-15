@@ -19,8 +19,8 @@ class Settings(BaseSettings):
     nvidia_llm_model: str = "meta/llama-3.3-70b-instruct"
     llm_max_tokens: int = Field(default=700, ge=64, le=4096)
     llm_temperature: float = Field(default=0.1, ge=0, le=2)
-    llm_timeout_seconds: float = Field(default=12.0, gt=0, le=120)
-    llm_max_retries: int = Field(default=1, ge=0, le=3)
+    llm_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    llm_max_retries: int = Field(default=0, ge=0, le=3)
     llm_max_input_chars: int = Field(default=8000, ge=500, le=50000)
     llm_max_context_chars: int = Field(default=12000, ge=1000, le=60000)
     llm_max_context_items: int = Field(default=5, ge=1, le=20)

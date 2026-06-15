@@ -3,8 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // TICKET DETAIL</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Ticket Detail</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
 .ticket-shell { max-width:1180px;margin:0 auto; }
 .ticket-hero {
@@ -89,6 +89,47 @@
 .similar-ticket-id { font-family:var(--mono);font-size:13px;font-weight:800;color:var(--accent);overflow-wrap:anywhere; }
 .similar-ticket-title { margin-top:8px;font-size:13px;font-weight:800;color:var(--text);line-height:1.4;overflow-wrap:anywhere; }
 .similar-ticket-resolution { margin-top:10px;background:var(--bg1);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;color:var(--text2);line-height:1.65;overflow-wrap:anywhere; }
+.ticket-empty {
+  background: var(--bg1);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(37,99,235,.08);
+}
+.ticket-empty h1 {
+  font-size: 20px;
+  color: var(--text);
+  margin-bottom: 8px;
+}
+.ticket-empty p {
+  max-width: 720px;
+  color: var(--text2);
+  font-size: 13px;
+  line-height: 1.7;
+  margin-bottom: 16px;
+}
+.ticket-empty-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+.ticket-jump {
+  display: grid;
+  grid-template-columns: minmax(260px, 420px) auto;
+  gap: 10px;
+  margin-top: 16px;
+}
+.ticket-jump input {
+  height: 38px;
+  border: 1px solid var(--border2);
+  border-radius: 7px;
+  padding: 0 12px;
+  color: var(--text);
+  background: #fff;
+}
+@media (max-width: 760px) {
+  .ticket-jump { grid-template-columns: 1fr; }
+}
 @media (max-width: 1050px) {
   .detail-layout { grid-template-columns:1fr; }
   .ticket-top { flex-direction:column; }
@@ -103,21 +144,21 @@
 <body>
 <div id="topbar">
   <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
-  <div class="center"><div class="page-title">Ticket Detail // Investigation</div></div>
+  <div class="center"><div class="page-title">Ticket Detail</div></div>
   <div class="right">
     <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
     <div id="utc-clock"></div>
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
@@ -134,7 +175,7 @@
     </div>
   </div>
 </main>
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 let currentTicket = null;
 let selectedReviewDecision = 'approve';
@@ -148,6 +189,34 @@ function metricCard(label, value, tone = '') {
     <div class="signal-label">${label}</div>
     <div class="signal-value" style="${tone ? `color:${tone}` : ''}">${value || '—'}</div>
   </div>`;
+}
+
+function openEnteredTicket() {
+  const input = document.getElementById('ticket-id-input');
+  const id = input?.value.trim();
+  if (!id) {
+    input?.focus();
+    return;
+  }
+  location.href = `ticket.html?id=${encodeURIComponent(id)}`;
+}
+
+function renderNoTicketSelected() {
+  clearContainer('ticket-error');
+  document.getElementById('ticket-body').innerHTML = `
+    <section class="ticket-empty">
+      <h1>No ticket selected</h1>
+      <p>Ticket Detail needs a ticket id in the URL, for example <span class="mono">ticket.html?id=INC12345</span>. Open a ticket from Search, Ticket Stream, Dashboard recent tickets, or paste a ticket id below.</p>
+      <div class="ticket-empty-actions">
+        <button class="btn btn-primary" onclick="location.href='search.html'">Open Search</button>
+        <button class="btn btn-ghost" onclick="location.href='stream.html'">Open Ticket Stream</button>
+        <button class="btn btn-ghost" onclick="location.href='routing.html'">Route A Ticket</button>
+      </div>
+      <div class="ticket-jump">
+        <input id="ticket-id-input" autocomplete="off" placeholder="Paste ticket id..." onkeydown="if(event.key==='Enter')openEnteredTicket()">
+        <button class="btn btn-primary" onclick="openEnteredTicket()">Load Ticket</button>
+      </div>
+    </section>`;
 }
 
 function buildSimilarTicketPanel(t) {
@@ -344,7 +413,7 @@ async function loadTicket() {
   initPage();
   const id = param('id');
   if (!id) {
-    showError('ticket-error', 'Ticket id is missing from the URL.');
+    renderNoTicketSelected();
     return;
   }
   try {

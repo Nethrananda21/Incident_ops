@@ -3,19 +3,20 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // HUMAN REVIEW</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Human Review</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
-.review-3col { display:grid;grid-template-columns:320px 1fr 340px;gap:10px;height:calc(100vh - 190px); }
-.queue-col   { display:flex;flex-direction:column;background:var(--bg1);border:1px solid var(--border);border-radius:8px;overflow:hidden; }
+.review-3col { display:grid;grid-template-columns:320px minmax(0,1fr) 340px;gap:12px;height:calc(100vh - 190px);align-items:start; }
+.queue-col   { display:flex;flex-direction:column;background:var(--bg1);border:1px solid var(--border);border-radius:8px;overflow:hidden;box-shadow:var(--surface-ring),var(--shadow-sm);height:100%; }
 .queue-scroll{ flex:1;overflow-y:auto; }
-.evidence-col{ overflow-y:auto;background:var(--bg1);border:1px solid var(--border);border-radius:8px;padding:16px; }
+.evidence-col{ overflow-y:auto;background:linear-gradient(180deg,var(--bg1),var(--bg2));border:1px solid var(--border);border-radius:8px;padding:16px;box-shadow:var(--surface-ring),var(--shadow-sm);height:100%; }
 .action-col  { display:flex;flex-direction:column;gap:10px;overflow-y:auto; }
-.queue-item  { padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s; }
-.queue-item:hover { background:#f5f8ff; }
-.queue-item.selected { background:#eff6ff;border-left:3px solid var(--accent); }
+.action-col > .card { box-shadow:var(--surface-ring),var(--shadow-sm); }
+.queue-item  { padding:13px 16px;border-bottom:1px solid var(--border);cursor:pointer;transition:background .12s,box-shadow .12s; }
+.queue-item:hover { background:#eef6ff; }
+.queue-item.selected { background:#eff6ff;border-left:0;box-shadow:inset 3px 0 0 var(--accent); }
 .queue-item.urgent   { border-left:0; }
-.queue-item.selected.urgent { border-left:3px solid var(--accent); }
+.queue-item.selected.urgent { border-left:0;box-shadow:inset 3px 0 0 var(--accent); }
 .queue-item-head { display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:start;margin-bottom:6px; }
 .queue-ticket-id { min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-family:var(--mono);font-size:12px;font-weight:700;color:var(--text); }
 .queue-date { white-space:nowrap;font-size:10px;color:var(--text3); }
@@ -27,34 +28,42 @@
 .bar-track { height:6px;background:var(--bg3);border-radius:999px;overflow:hidden; }
 .bar-fill  { height:100%;border-radius:999px;transition:width .4s; }
 .history-row { display:grid;grid-template-columns:110px 75px 95px 70px 1fr;gap:8px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:11px;color:var(--text2); }
+@media (min-width:1181px) {
+  .action-col > .card { position:sticky;top:0; }
+}
+@media (max-width:1180px) {
+  .review-3col { grid-template-columns:1fr;height:auto; }
+  .queue-col { max-height:420px; }
+  .evidence-col { min-height:360px; }
+}
 </style>
 </head>
 <body>
 <div id="topbar">
   <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
-  <div class="center"><div class="page-title">Human Review // Escalation Queue</div></div>
+  <div class="center"><div class="page-title">Human Review</div></div>
   <div class="right">
     <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
     <div id="utc-clock"></div>
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item active" href="escalations.html"><span>Human Review</span></a>
 </nav>
 <main id="main">
   <div class="page-header">
-    <h1>Human Review // Escalation Queue</h1>
-    <p>Act on AI-escalated tickets · <span style="font-family:var(--mono);color:var(--accent)">GET /v1/escalations</span> · <span style="font-family:var(--mono);color:var(--accent)">POST /v1/review/escalations</span></p>
+    <h1>Human Review</h1>
+    <p>Act on tickets that need human review and record reviewer decisions.</p>
   </div>
   <div id="esc-error"></div>
 
@@ -103,7 +112,7 @@
     </div>
   </div>
 </main>
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 let selected = null;
 let allEsc   = [];
@@ -144,6 +153,8 @@ async function loadEscalations() {
     const target = new URLSearchParams(location.search).get('ticket');
     if (target && allEsc.some(t => (t.ticket_id || t.id) === target)) {
       setTimeout(() => selectTicket(target), 50);
+    } else if (!selected && allEsc[0]) {
+      setTimeout(() => selectTicket(allEsc[0].ticket_id || allEsc[0].id), 50);
     }
   } catch(e) {
     showError('esc-error', e.message, e.status);

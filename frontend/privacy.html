@@ -3,44 +3,46 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>INCIDENT_OPS // PRIVACY AUDIT</title>
-<link rel="stylesheet" href="shared.css?v=20260509-nav9">
+<title>IncidentOps Privacy Audit</title>
+<link rel="stylesheet" href="shared.css?v=20260615-uipolish1">
 <style>
-.analytics-row { display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:0;background:var(--border);margin-bottom:1px; }
-.analytics-row>.card { border:none;border-right:1px solid var(--border); }
-.analytics-row>.card:last-child { border-right:none; }
+.analytics-row { display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:12px;background:transparent;margin-bottom:1px; }
+.analytics-row>.card { border:1px solid var(--border); }
+.analytics-row>.card:last-child { border-right:1px solid var(--border); }
 .entity-bar { display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--border);font-family:var(--mono);font-size:10px; }
 .entity-bar .bar-track { flex:1;height:4px;background:var(--bg3);border-radius:2px;overflow:hidden; }
 .entity-bar .bar-fill  { height:100%;border-radius:2px;transition:width .6s ease; }
-.log-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border); }
+.log-header { display:flex;align-items:center;justify-content:space-between;padding:12px 16px;border-bottom:1px solid var(--border);background:linear-gradient(180deg,var(--bg1),var(--bg2)); }
+@media (max-width:1180px) { .analytics-row { grid-template-columns:repeat(2,minmax(0,1fr)); } }
+@media (max-width:760px) { .analytics-row { grid-template-columns:1fr; } .log-header { align-items:stretch;flex-direction:column;gap:10px; } }
 </style>
 </head>
 <body>
 <div id="topbar">
   <div class="brand"><strong>IncidentOps</strong><span>Routing Console</span></div>
-  <div class="center"><div class="page-title">Privacy Audit // Redaction Governance</div></div>
+  <div class="center"><div class="page-title">Privacy Audit</div></div>
   <div class="right">
     <div id="status-pill"><div class="dot"></div><span>STATUS_OK</span></div>
     <div id="utc-clock"></div>
   </div>
 </div>
 <nav id="sidebar" aria-label="Primary navigation">
-  <div class="nav-section">OPERATIONS</div>
+  <div class="nav-section">Work</div>
   <a class="nav-item" href="dashboard.html"><span>Dashboard</span></a>
   <a class="nav-item" href="stream.html"><span>Ticket Stream</span></a>
   <a class="nav-item" href="routing.html"><span>Routing Desk</span></a>
   <a class="nav-item" href="search.html"><span>Search</span></a>
-  <div class="nav-section">ANALYTICS</div>
+  <div class="nav-section">Insights</div>
   <a class="nav-item" href="intelligence.html"><span>Intelligence</span></a>
-  <div class="nav-section">DATA</div>
+  <div class="nav-section">Records</div>
   <a class="nav-item" href="knowledge.html"><span>Knowledge Base</span></a>
   <a class="nav-item active" href="privacy.html"><span>Privacy Audit</span></a>
   <a class="nav-item" href="escalations.html"><span>Human Review</span></a>
 </nav>
 <main id="main">
   <div class="page-header">
-    <h1>Privacy Audit // Redaction Governance</h1>
-    <p><span style="font-family:var(--mono);color:var(--accent)">GET /v1/privacy/audit/recent</span></p>
+    <h1>Privacy Audit</h1>
+    <p>Review recent redaction findings, detector confidence, and policy coverage.</p>
   </div>
   <div id="priv-error"></div>
 
@@ -79,7 +81,7 @@
   <!-- Full-width findings table -->
   <div class="card" style="padding:0">
     <div class="log-header">
-      <div class="card-title" style="margin:0">REDACTION LOG <span class="sub" id="log-count">// 0</span></div>
+      <div class="card-title" style="margin:0">REDACTION LOG <span class="sub" id="log-count">0</span></div>
       <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
         <select id="pf-type" onchange="applyPrivFilter()" style="width:140px">
           <option value="">All Entity Types</option>
@@ -121,12 +123,12 @@
 <!-- Stream / Privacy finding detail modal -->
 <div class="modal-overlay" id="stream-modal">
   <div class="modal-box"><div class="modal-header">
-    <div class="modal-title" id="stream-modal-title">PRIVACY FINDING //</div>
+    <div class="modal-title" id="stream-modal-title">Privacy finding</div>
     <button class="modal-close" onclick="document.getElementById('stream-modal').classList.remove('open')">✕</button>
   </div><div id="stream-modal-content"></div></div>
 </div>
 
-<script src="shared.js?v=20260509-nav9"></script>
+<script src="shared.js?v=20260613-pagesfix2"></script>
 <script>
 const ENTITY_COLORS = {
   PERSON:'#5b8fff', EMAIL:'#bf6fff', ORG:'#33cc77',
@@ -209,7 +211,7 @@ function applyPrivFilter() {
   const filtered = allFindings.filter(f=>
     (!typeF || f.entity_type === typeF) && (f.confidence||0) >= confF
   );
-  document.getElementById('log-count').textContent = `// ${filtered.length}`;
+  document.getElementById('log-count').textContent = filtered.length;
   renderTable(filtered);
 }
 
@@ -247,7 +249,7 @@ async function openFindingDetail(streamId, ticketId) {
   const title   = document.getElementById('stream-modal-title');
   const content = document.getElementById('stream-modal-content');
   modal.classList.add('open');
-  title.textContent = `PRIVACY FINDING // ${streamId}`;
+  title.textContent = `Privacy finding ${streamId}`;
   content.innerHTML = `<div style="padding:20px;font-family:var(--mono);font-size:11px;color:var(--text3);animation:skeleton-pulse 1.2s infinite">Loading…</div>`;
   try {
     const d = await apiFetch(`/v1/privacy/audit/${streamId}`);
